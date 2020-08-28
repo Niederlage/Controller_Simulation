@@ -108,11 +108,12 @@ def gradient_desent_moment(x0):
     x_post = x_0
     k = 0
     eta = 0.0001
-    gamma = 0.88
-    v = np.array([0.,0.09])
+    gamma = 0.75
+
+    v = np.array([0.29,0.41])
     v_trace = [v]
-    while True:
-        s = - get_f_val(x_pre,'grad').reshape(2)
+    while k<1000:
+        s = - get_f_val(x_pre - gamma * v,'grad').reshape(2)
         v = gamma * v + eta * s
         v_trace.append(v)
         x_pre = x_post
@@ -133,6 +134,53 @@ def gradient_desent_moment(x0):
     print(search_line[-1])
     search_line = np.array(search_line).T
     print('gradient_discent_cost:', k, 'step')
+
+    return search_line, v_trace
+
+def gradient_descent_Adam(x0):
+    # 初始化
+    search_line = []
+    search_line.append(x0)
+    x_0 = x0
+    epsilon_x = 1e-5
+    epsilon_f = 1e-10
+    # epsilon_x, epsilon_f 为算法终止判定
+    x_pre = x_0
+    x_post = x_0
+    k = 0
+    eta = 0.001
+    beta1 = 0.9
+    beta2 = 0.999
+    epsilon = 1e-8
+    mt = np.array([0.,0.])
+    vt = np.array([0.,0.])
+    v_trace = [mt]
+    while True:
+        k = k + 1
+        s = get_f_val(x_pre,'grad').reshape(2)
+        mt = beta1 * mt + (1 - beta1)* s
+        vt = beta2 * vt + (1 - beta2)* np.square(s)
+        mt_hat = mt/(1 - beta1**k)
+        vt_hat = vt / (1 - beta2 ** k)
+        v_trace.append(vt)
+        x_pre = x_post
+        gt = np.sqrt(vt_hat).sum()
+        x_post = x_pre - eta * mt_hat /(epsilon + gt)
+        # print(x_post)
+        search_line.append(x_post)
+
+        error = get_f_val(x_post, 'f') - get_f_val(x_pre, 'f')
+        # print(error)
+        if  np.linalg.norm(x_post - x_pre) <= epsilon_x:
+            print('step small enough')
+            break
+        elif abs(error) <= epsilon_f:
+            print('error small enough')
+            break
+
+    print(search_line[-1])
+    search_line = np.array(search_line).T
+    print('gradient_discent_Adam_cost:', k, 'step')
 
     return search_line, v_trace
 
@@ -464,11 +512,13 @@ if __name__ == '__main__':
     x0 = [-1., -1.]
     # line = gradient_desent(x0)
     # line = conjugate_gradient_method(x0)
-    line, v_trace = gradient_desent_moment(x0)
+    # line, v_trace = gradient_desent_moment(x0)
+    line, v_trace = gradient_descent_Adam(x0)
     # line = newton_method(x0)
     # line = trust_region_method(x0, delta0 = 10)
     # line, triangle = nelder_mead_method(x0)
+
     plot_function(line)
     # plot_NM_function(line, triangle)
-    # plt.plot(v_trace)
-    # plt.show()
+    plt.plot(v_trace)
+    plt.show()
