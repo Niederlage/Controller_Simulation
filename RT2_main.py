@@ -102,12 +102,12 @@ mu_W_neg = init.mu_W_neg
 def flachtrajektorie(z0, k, T):
     za = z0[0]
     zb = z0[1]
-    sum = za
+    sumz = za
     t = sp.symbols('t')
 
     for i in range(k + 1, 2 * k + 1 + 1):
-        sum += (zb - za) * p_factorial(i, k) * (t / T) ** i
-    return sum
+        sumz += (zb - za) * p_factorial(i, k) * (t / T) ** i
+    return sumz
 
 
 def p_factorial(i, k):
@@ -554,14 +554,17 @@ def anti_windup(e_u, e_x, v_pre):
 
 
 def visualize_x_y_function(state_sq, x_vec, f_x, dt):
+
     x_is = state_sq[2][:]
     y_is = state_sq[4][:]
-    y_sq = []
+    y_sq = np.zeros(1)
     timeline = np.arange(x_vec[0], x_vec[1], dt)
+
     x = sp.symbols('x')
     ysoll = sp.lambdify(x, f_x, 'numpy')
-    for xsoll in timeline:
-        y_sq.append(ysoll(xsoll))
+    y_sq = np.hstack((y_sq, ysoll(timeline[:])))
+    y_sq = np.delete(y_sq, 0)  # loop time= 0.0019989013671875
+
     fig = plt.figure()
     ax1 = fig.add_subplot()
     ax1.plot(timeline, y_sq, '#0000FF', label='y_soll')
