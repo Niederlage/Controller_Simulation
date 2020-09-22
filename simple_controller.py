@@ -8,7 +8,7 @@ import control
 
 class Control_Simulation():
     def __init__(self, x0, u0, T, dt):
-        self.J = 0.023
+        self.J = 0.053
         self.r0 = 0.0088
         self.c0 = 0.7035
         self.x0 = x0
@@ -28,7 +28,7 @@ class Control_Simulation():
         self.K1 = 1 / 24.48
         self.K2 = 0.3
         self.Psi_PM = 0.02
-        self.T_last = -0.05
+        self.T_last = 5.
         # self.ids = 0.
         # self.iqs = 5.
         # self.ns = 200.
@@ -86,6 +86,19 @@ class Control_Simulation():
 
         return state_flow, np.array(u_traj)
 
+    def exakt_linear_controller(self, x_mess, x_soll, e_y):
+        e_int = e_y + x_mess[2] - x_soll[2]
+        u_bar = - 4000 * (x_mess[2] - x_soll[2]) - 682.8427 * self.K2 / self.J * (x_mess[1] - x_soll[1]) - 38.2842 * e_int
+        u1 = self.Lq * x_mess[1] * x_mess[2] - 1000 * self.Ld * (x_mess[0] - x_soll[0]) + self.R0 * x_mess[0]
+        u2 = self.J * self.Lq / self.K2 * u_bar + self.Ld * x_mess[1] * x_mess[2] + self.Psi_PM * x_mess[2] + self.R0 * \
+             x_mess[1]
+        if abs(u1) > 24.:
+            u1 = np.sign(u1) * 24.
+        if abs(u2) > 24.:
+            u2 = np.sign(u2) * 24.
+
+        return np.array([u1, u2]), e_int
+
     def pid_controller(self, x_mess, x_soll, e_vor):
         e_x = x_soll - x_mess
         int_e = e_vor + e_x
@@ -93,15 +106,6 @@ class Control_Simulation():
         # if np.linalg.norm(ur) > 5:
         #     ur = 5
         return ur, int_e
-
-    def exakt_linear_controller(self, x_mess, x_soll, e_y):
-        e_int = e_y + x_mess[2] - x_soll[2]
-        u_bar = - 4400 * (x_mess[2] - x_soll[2]) - 100 * self.K2 / self.J * (x_mess[1] - x_soll[1]) - 1 * e_int
-        u1 = self.Lq * x_mess[1] * x_mess[2] - 15 * self.Ld * (x_mess[0] - x_soll[0]) + self.R0 * x_mess[0]
-        u2 = self.J * self.Lq / self.K2 * u_bar + self.Ld * x_mess[1] * x_mess[2] + self.Psi_PM * x_mess[2] + self.R0 * \
-             x_mess[1]
-
-        return np.array([u1, u2]), e_int
 
     def lqr_controller(self, state, ysoll):
         k = np.array([-64.2123327747466, - 15.0104487417976, - 3.16227766016849])
@@ -113,8 +117,9 @@ class Control_Simulation():
         ysoll = np.zeros((self.step, 3))
         for step in range(self.step):
             ysoll[step, 0] = 0.
-            ysoll[step, 1] = 5.
-            ysoll[step, 2] = 4.
+            ysoll[step, 1] = self.T_last / self.K2
+            ysoll[step, 2] = 209.
+
         return ysoll
 
     def demo_simulation(self):
@@ -131,7 +136,7 @@ class Control_Simulation():
         ax1.plot(timeline, ysoll[:, 0], 'r:', label='id_soll')
         ax1.plot(timeline, ysoll[:, 1], 'g:', label='iq_soll')
         ax1.plot(timeline, ysoll[:, 2], 'b:', label='n_soll')
-
+        # ax1.set_ylim(-5,5)
         legend = ax1.legend(loc='lower right', shadow=True)
         # legend.get_frame().set_facecolor('C0')
         ax1.set_xlabel('t/s')
@@ -148,64 +153,10 @@ class Control_Simulation():
         ax2.grid(True)
         plt.show()
 
-    def flachtrajektorie(self, z0, k, T):
-        za = z0[0]
-        zb = z0[1]
-        sumz = za
-        t = sp.symbols('t')
-
-        for i in range(k + 1, 2 * k + 1 + 1):
-            sumz += (zb - za) * self.p_factorial(i, k) * (t / T) ** i
-        return sumz
-
-    def p_factorial(self, i, k):
-        up = (-1) ** (i - k - 1) * np.factorial(2 * k + 1)
-        down = i * np.factorial(k) * np.factorial(i - k - 1) * np.factorial(2 * k + 1 - i)
-        return up / down
-
-    def x_derivative(self, x0, order, T):
-        X = []
-        t = sp.symbols('t')
-
-        Xsoll = self.flachtrajektorie(self, x0, 2, T)
-        x_t = Xsoll
-        X.append(sp.lambdify(t, Xsoll, 'numpy'))
-
-        for i in range(order):
-            Xsoll = sp.diff(Xsoll, t)
-            X.append(sp.lambdify(t, Xsoll, 'numpy'))
-        return X, x_t
-
-    # def solltrajctory(self):
-    #     t = 0
-    #     soll_state = np.zeros((10, self.step))
-    #     Xlist, x_t = self.x_derivative(self.x0, 4, T_total)
-    #
-    #     start = time.time()
-    #     for step in range(total_step):
-    #         X = Xlist[0](t)
-    #         dX = Xlist[1](t)
-    #         d2X = Xlist[2](t)
-    #         t += dt
-    #
-    #         soll_state[0, step] = X
-    #         soll_state[1, step] = dX
-    #         soll_state[2, step] = d2X
-    #         soll_state[3, step] = d3X
-    #         soll_state[4, step] = d4X
-    #         soll_state[5, step] = Y
-    #         soll_state[6, step] = dY
-    #         soll_state[7, step] = d2Y
-    #         soll_state[8, step] = d3Y
-    #         soll_state[9, step] = d4Y
-    #     print('solltraj:', time.time() - start)
-    #     return soll_state
-
-
 if __name__ == '__main__':
     xinit = np.array([0., 0., 0.])
     uinit = 0.
-    dt0 = 0.01
-    Tinit = 5
+    dt0 = 0.001
+    Tinit = 10
     control_simu = Control_Simulation(xinit, uinit, Tinit, dt0)
     control_simu.demo_simulation()
