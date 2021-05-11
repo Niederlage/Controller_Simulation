@@ -6,75 +6,6 @@ from reeds_shepp_path_planning import ReedsSheppPathPlanning
 import yaml
 
 
-#
-# def plot_arrow(x, y, yaw, length=0.5, width=0.1):  # pragma: no cover
-#     plt.arrow(x, y, length * np.cos(yaw), length * np.sin(yaw),
-#               head_length=width, head_width=width)
-#     plt.plot(x, y)
-#
-#
-# def plot_robot(x, y, yaw, config):  # pragma: no cover
-#
-#     outline = np.array([[-config.robot_length / 2, config.robot_length / 2,
-#                          (config.robot_length / 2), -config.robot_length / 2,
-#                          -config.robot_length / 2],
-#                         [config.robot_width / 2, config.robot_width / 2,
-#                          - config.robot_width / 2, -config.robot_width / 2,
-#                          config.robot_width / 2]])
-#     Rot1 = np.array([[np.cos(yaw), np.sin(yaw)],
-#                      [-np.sin(yaw), np.cos(yaw)]])
-#     outline = (outline.T.dot(Rot1)).T
-#     outline[0, :] += x
-#     outline[1, :] += y
-#     plt.plot(np.array(outline[0, :]).flatten(),
-#              np.array(outline[1, :]).flatten(), "-k")
-#
-#
-# def try_tracking(zst, u_op, trajectory, ref_traj=None, optimal_time=False):
-#     k = 0
-#     f = plt.figure()
-#     while True:
-#         if optimal_time:
-#             zst[:3] = ut.motion_model(zst[:3], u_op[:, k], ut.optimal_dt[k])  # simulate robot
-#         else:
-#             zst[:3] = ut.motion_model(zst[:3], u_op[:, k], dt=ut.dt)
-#
-#         e_lon = zst[0] - predicted_trajectory[0][1]
-#         e_lat = zst[1] - predicted_trajectory[1][1]
-#         zst[-2:] = np.array([e_lon, e_lat])
-#         trajectory = np.vstack((trajectory, zst))  # store state history
-#
-#         if show_animation:
-#             plt.cla()
-#             # for stopping simulation with the esc key.
-#             plt.gcf().canvas.mpl_connect(
-#                 'key_release_event',
-#                 lambda event: [exit(0) if event.key == 'escape' else None])
-#
-#             plt.plot(zst[0], zst[1], "xr")
-#             plot_robot(zst[0], zst[1], zst[2], ut)
-#             plot_arrow(zst[0], zst[1], zst[2])
-#             plt.plot(predicted_trajectory[0], predicted_trajectory[1], "-g", label="MPC prediciton")
-#             if ref_traj is not None:
-#                 plt.plot(ref_traj[0], ref_traj[1], "-", color="orange", label="RS reference")
-#             plt.plot(predicted_trajectory[0][-1], predicted_trajectory[1][-1], "x", color="purple")
-#             plt.plot(trajectory[:, 0], trajectory[:, 1], "-r")
-#             plt.legend()
-#             if plot_goal:
-#                 plt.plot(goal[0], goal[1], "xb")
-#
-#             plt.axis("equal")
-#             plt.grid(True)
-#             plt.pause(0.01)
-#             k += 1
-#
-#         if k >= u_op.shape[1]:
-#             print("end point arrived...")
-#             break
-#
-#     return trajectory
-#
-
 class UTurnMPC():
     def __init__(self):
         self.L = 1.0
@@ -192,7 +123,7 @@ if __name__ == '__main__':
     ref_traj = np.array([px, py, pyaw])
 
     mpc = MPC(param, ref_traj=ref_traj)
-
+    start[2] *= np.pi / 180
     zst = np.hstack((start, np.array([0., 0., 0., 0.])))
     coefficients = np.array([1, 1, 1, 1])
     trajectory = np.copy(zst)

@@ -17,6 +17,7 @@ class MPC(object):
         wg = param["wg"]
         self.uj_bound = param["uj_bound"]
         self.uo_bound = np.array(param["uo_bound"]) * np.pi / 180
+
         goal = param["goal"]
         goal[2] *= np.pi / 180
         self.with_reference = False
@@ -140,7 +141,7 @@ class MPC(object):
     def init_model_reference(self, ref_traj, wg, goal):
         N_p = np.shape(ref_traj)[1]
         self.N_s = 9
-        # goal[:2] = ref_traj[:, -1]
+        # goal = [ref_traj[0, -1], ref_traj[1, -1], ref_traj[2, -1]]
 
         m = pyo.ConcreteModel()
         m.sNum = pyo.RangeSet(0, N_p - 1)  # predict traj N_p - 1 times
@@ -155,10 +156,11 @@ class MPC(object):
         m.ref_cte = pyo.Param(initialize=0.0, mutable=True)  # reference lat error
         m.ref_epsi = pyo.Param(initialize=0.0, mutable=True)  # reference heading error
         m.states0 = pyo.Param(pyo.RangeSet(0, self.N_s - 1),
-                              initialize={0: 0., 1: 0., 2: 0., 3: 0., 4: 0., 5: 0., 6: 0., 7: 0., 8: 0.},
+                              initialize={0: ref_traj[0, 0], 1: ref_traj[1, 0], 2: ref_traj[2, 0], 3: 0., 4: 0., 5: 0.,
+                                          6: 0., 7: 0., 8: 0.},
                               mutable=True)  # state initial
         m.goal = pyo.Param(pyo.RangeSet(0, 5),
-                           initialize={0: goal[0], 1: goal[1], 2: goal[2], 3: goal[3], 4: goal[4], 5: goal[5]})  # goal
+                           initialize={0: goal[0], 1: goal[1], 2: goal[2], 3: 0., 4: 0., 5: 0.})  # goal
 
         m.ref_trajx = pyo.Param(m.sNum, rule=lambda m, k: ref_traj[0, k])
         m.ref_trajy = pyo.Param(m.sNum, rule=lambda m, k: ref_traj[1, k])
@@ -179,7 +181,7 @@ class MPC(object):
         m.states0_update = pyo.Constraint(pyo.RangeSet(0, self.N_s - 1),
                                           rule=lambda m, i: m.states[i, 0] == m.states0[i])
         # goal = states end
-        m.goal_update = pyo.Constraint(pyo.RangeSet(0, 5), rule=lambda m, k: m.goal[k] == m.states[k, N_p - 1])
+        m.goal_update = pyo.Constraint(pyo.RangeSet(0, 5), rule=lambda m, i: m.goal[i] == m.states[i, N_p - 1])
 
         ############### discretized Nonlinear Differential equations as constraints ######################
         # x' = x + v * cos(theta) * dt
