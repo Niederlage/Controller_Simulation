@@ -234,12 +234,12 @@ class MPC(object):
         m.suoobj = m.wg[3] * sum((m.uo[k + 1] - m.uo[k]) ** 2 for k in m.uNum1)  # sum: wg * ||uo_next - uo||^2
         m.sujobj = m.wg[3] * sum((m.uj[k + 1] - m.uj[k]) ** 2 for k in m.uNum1)  # sum: wg * ||j_next - j||^2
 
-        m.ctexobj = m.wg[2] * sum((m.states[6, k] - m.ref_cte) ** 2 for k in m.sNum)  # sum: wg * ||ctex - cte_ref||^2
-        m.cteyobj = m.wg[2] * sum((m.states[7, k] - m.ref_cte) ** 2 for k in m.sNum)  # sum: wg * ||ctey - cte_ref||^2
-        m.epsiobj = m.wg[2] * sum((m.states[8, k] - m.ref_epsi) ** 2 for k in m.sNum)  # sum: wg * ||epsi - epsi_ref||^2
+        m.ctexobj = m.wg[3] * sum((m.states[6, k] - m.ref_cte) ** 2 for k in m.sNum)  # sum: wg * ||ctex - cte_ref||^2
+        m.cteyobj = m.wg[3] * sum((m.states[7, k] - m.ref_cte) ** 2 for k in m.sNum)  # sum: wg * ||ctey - cte_ref||^2
+        m.epsiobj = m.wg[3] * sum((m.states[8, k] - m.ref_epsi) ** 2 for k in m.sNum)  # sum: wg * ||epsi - epsi_ref||^2
 
-        m.timeobj = m.wg[5] * sum(m.dt ** 2 for k in m.sNum)
-        m.distanceobj = m.wg[5] * sum(
+        m.timeobj = m.wg[3] * sum(m.dt ** 2 for k in m.sNum)
+        m.distanceobj = m.wg[4] * sum(
             (m.states[0, k + 1] - m.states[0, k]) ** 2 + (m.states[1, k + 1] - m.states[1, k]) ** 2 for k in m.uNum1)
 
         m.obj = pyo.Objective(

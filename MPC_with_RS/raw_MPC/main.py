@@ -10,8 +10,8 @@ class UTurnMPC():
     def __init__(self):
         self.L = 1.0
         self.dt = 1e-1
-        self.robot_length = 0.5
-        self.robot_width = 0.3
+        self.robot_length = 0.8
+        self.robot_width = 0.6
         self.optimal_dt = None
 
     def motion_model(self, zst, u_in, dt):
