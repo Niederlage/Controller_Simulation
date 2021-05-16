@@ -15,17 +15,19 @@ from scipy.spatial.transform import Rotation as Rot
 
 class CarModel:
     def __init__(self):
-        self.WB = 3.  # rear to front wheel
+        self.WB = 3.  # rear to front wheel [m]
         self.W = 2.  # width of car
-        self.LF = 3.3  # distance from rear to vehicle front end
+        self.LF = 3.5  # distance from rear to vehicle front end
         self.LB = 1.0  # distance from rear to vehicle back end
         self.MAX_STEER = 0.6  # [rad] maximum steering angle
-
+        self.SAFE_FRONT = self.LF + 0.3
+        self.SAFE_BACK = self.LB + 0.3
+        self.SAFE_WIDTH = self.W + 2
         self.W_BUBBLE_DIST = (self.LF - self.LB) / 2.0
         self.W_BUBBLE_R = sqrt(((self.LF + self.LB) / 2.0) ** 2 + 1)
 
         # vehicle rectangle vertices
-        self.VRX = [self.LF, self.LF, -self.LB, -self.LB, self.LF]
+        self.VRX = [self.LF, self.LF, -self.LB, -self.LB, self.LF]  # need 5 edges to draw all vertices
         self.VRY = [self.W / 2, -self.W / 2, -self.W / 2, self.W / 2, self.W / 2]
 
     def check_car_collision(self, x_list, y_list, yaw_list, ox, oy, kd_tree):
@@ -33,7 +35,7 @@ class CarModel:
             cx = i_x + self.W_BUBBLE_DIST * cos(i_yaw)
             cy = i_y + self.W_BUBBLE_DIST * sin(i_yaw)
 
-            ids = kd_tree.query_ball_point([cx, cy], self.W_BUBBLE_R)
+            ids = kd_tree.query_ball_point([cx, cy], self.W_BUBBLE_R)  # circle out all the points inside Circle R
 
             if not ids:
                 continue
@@ -46,14 +48,18 @@ class CarModel:
 
     def rectangle_check(self, x, y, yaw, ox, oy):
         # transform obstacles to base link frame
-        rot = Rot.from_euler('z', yaw).as_matrix()[0:2, 0:2]
+        rotT = Rot.from_euler('z', yaw).as_matrix()[0:2, 0:2].T
         for iox, ioy in zip(ox, oy):
             tx = iox - x
             ty = ioy - y
-            converted_xy = np.stack([tx, ty]).T @ rot
+            # converted_xy = np.stack([tx, ty]).T @ rot
+            converted_xy = rotT @ np.stack([tx, ty])
             rx, ry = converted_xy[0], converted_xy[1]
 
-            if not (rx > self.LF or rx < -self.LB or ry > self.W / 2.0 or ry < -self.W / 2.0):
+            if not (rx > self.SAFE_FRONT or
+                    rx < -self.SAFE_BACK or
+                    ry > self.SAFE_WIDTH / 2.0 or
+                    ry < -self.SAFE_WIDTH / 2.0):
                 return False  # no collision
 
         return True  # collision

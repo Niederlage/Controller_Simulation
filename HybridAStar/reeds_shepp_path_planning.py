@@ -13,18 +13,7 @@ import numpy as np
 show_animation = True
 
 
-def plot_arrow(x, y, yaw, length=1.0, width=0.5, fc="r", ec="k"):
-    """
-    Plot arrow
-    """
 
-    if not isinstance(x, float):
-        for (ix, iy, iyaw) in zip(x, y, yaw):
-            plot_arrow(ix, iy, iyaw)
-    else:
-        plt.arrow(x, y, length * math.cos(yaw), length * math.sin(yaw),
-                  fc=fc, ec=ec, head_width=width, head_length=width)
-        plt.plot(x, y)
 
 
 class Path:
@@ -40,6 +29,19 @@ class Path:
 
 
 class ReedsSheppPathPlanning():
+
+    def plot_arrow(self, x, y, yaw, length=1.0, width=0.5, fc="r", ec="k"):
+        """
+        Plot arrow
+        """
+
+        if not isinstance(x, float):
+            for (ix, iy, iyaw) in zip(x, y, yaw):
+                self.plot_arrow(ix, iy, iyaw)
+        else:
+            plt.arrow(x, y, length * math.cos(yaw), length * math.sin(yaw),
+                      fc=fc, ec=ec, head_width=width, head_length=width)
+            plt.plot(x, y)
 
     def pi_2_pi(self, angle):
         return (angle + math.pi) % (2 * math.pi) - math.pi
@@ -389,8 +391,8 @@ def main():
         plt.plot(px, py, label="final course " + str(mode))
 
         # plotting
-        plot_arrow(start_x, start_y, start_yaw)
-        plot_arrow(end_x, end_y, end_yaw)
+        rspp.plot_arrow(start_x, start_y, start_yaw)
+        rspp.plot_arrow(end_x, end_y, end_yaw)
 
         plt.legend()
         plt.grid(True)

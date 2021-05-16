@@ -24,16 +24,16 @@ except Exception:
 
 class HybridAStar:
     def __init__(self):
-        self.XY_GRID_RESOLUTION = 10  # [m]
-        self.YAW_GRID_RESOLUTION = np.deg2rad(10.0)  # [rad]
-        self.MOTION_RESOLUTION = 0.5  # [m] path interpolate resolution
-        self.N_STEER = 10  # number of steer command
-        self.VR = 20.0  # robot radius
-        self.MAX_STEER = 1
-        self.SB_COST = 10.0  # switch back penalty cost
-        self.BACK_COST = 0.1  # backward penalty cost
-        self.STEER_CHANGE_COST = 15.0  # steer angle change penalty cost
-        self.STEER_COST = 1.0  # steer angle change penalty cost
+        self.XY_GRID_RESOLUTION = 2 # [m]
+        self.YAW_GRID_RESOLUTION = np.deg2rad(5.0)  # [rad]
+        self.MOTION_RESOLUTION = 0.2  # [m] path interpolate resolution
+        self.N_STEER = 7  # number of steer command
+        self.ROBOT_RADIUS = 10.0  # robot radius
+        self.MAX_STEER = 2
+        self.SB_COST = 5.0  # switch back penalty cost
+        self.BACK_COST = 10  # backward penalty cost
+        self.STEER_CHANGE_COST = 1.0  # steer angle change penalty cost
+        self.STEER_COST = 10.0  # steer angle change penalty cost
         self.H_COST = 15.0  # Heuristic cost
         self.rs = ReedsSheppPathPlanning()
         self.car = CarModel()
@@ -41,32 +41,35 @@ class HybridAStar:
         self.show_animation = True
 
     def calc_motion_inputs(self):
+        ############## get steer list interpolation with direction #####################
         for steer in np.concatenate((np.linspace(-self.car.MAX_STEER, self.car.MAX_STEER,
                                                  self.N_STEER), [0.0])):
             for d in [1, -1]:
                 yield [steer, d]
 
     def get_neighbors(self, current, config, ox, oy, kd_tree):
+        ############## get all neighbor nodes list  #####################
         for steer, d in self.calc_motion_inputs():
             node = self.calc_next_node(current, steer, d, config, ox, oy, kd_tree)
             if node and self.verify_index(node, config):
                 yield node
 
     def calc_next_node(self, current, steer, direction, config, ox, oy, kd_tree):
+        ############## get next node #####################
         x, y, yaw = current.x_list[-1], current.y_list[-1], current.yaw_list[-1]
 
         arc_l = self.XY_GRID_RESOLUTION * 1.5
         x_list, y_list, yaw_list = [], [], []
-        for _ in np.arange(0, arc_l, self.MOTION_RESOLUTION):
+        for _ in np.arange(0, arc_l, self.MOTION_RESOLUTION):  # get nonholonomic path
             x, y, yaw = self.car.move(x, y, yaw, self.MOTION_RESOLUTION * direction, steer)
             x_list.append(x)
             y_list.append(y)
             yaw_list.append(yaw)
-
+        # iteration til last state (x, y, yaw)
         if not self.car.check_car_collision(x_list, y_list, yaw_list, ox, oy, kd_tree):
             return None
 
-        d = direction == 1
+        d = direction == 1  # bool check direction reverse?
         x_ind = round(x / self.XY_GRID_RESOLUTION)
         y_ind = round(y / self.XY_GRID_RESOLUTION)
         yaw_ind = round(yaw / self.YAW_GRID_RESOLUTION)
@@ -76,13 +79,13 @@ class HybridAStar:
         if d != current.direction:
             added_cost += self.SB_COST
 
-        # steer penalty
-        added_cost += self.STEER_COST * abs(steer)
+        # steer penalty (linear)
+        added_cost += self.STEER_COST * steer ** 2
 
         # steer change penalty
-        added_cost += self.STEER_CHANGE_COST * abs(current.steer - steer)
+        added_cost += self.STEER_CHANGE_COST * (current.steer - steer) ** 2
 
-        cost = current.cost + added_cost + arc_l
+        cost = current.cost + added_cost + arc_l ** 2
 
         node = Node(x_ind, y_ind, yaw_ind, d, x_list,
                     y_list, yaw_list, [d],
@@ -215,7 +218,7 @@ class HybridAStar:
 
         h_dp = self.dph.calc_distance_heuristic(
             goal_node.x_list[-1], goal_node.y_list[-1],
-            obst[0], obst[1], self.XY_GRID_RESOLUTION, self.VR)
+            obst[0], obst[1], self.XY_GRID_RESOLUTION, self.ROBOT_RADIUS)
 
         pq = []
         openList[self.calc_index(start_node, config)] = start_node

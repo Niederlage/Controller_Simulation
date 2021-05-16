@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.linalg
 from MPC_Module import MPC
-from reeds_shepp_path_planning import ReedsSheppPathPlanning
+from HybridAStar.reeds_shepp_path_planning import ReedsSheppPathPlanning
 import yaml
 
 
