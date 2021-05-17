@@ -24,9 +24,9 @@ except Exception:
 
 class HybridAStar:
     def __init__(self):
-        self.XY_GRID_RESOLUTION = 2 # [m]
-        self.YAW_GRID_RESOLUTION = np.deg2rad(5.0)  # [rad]
-        self.MOTION_RESOLUTION = 0.2  # [m] path interpolate resolution
+        self.XY_GRID_RESOLUTION = 8  # [ m / grid]
+        self.YAW_GRID_RESOLUTION = np.deg2rad(5.0)  # [rad/ grid]
+        self.MOTION_RESOLUTION = 0.2  # [m/ grid] path interpolate resolution
         self.N_STEER = 7  # number of steer command
         self.ROBOT_RADIUS = 10.0  # robot radius
         self.MAX_STEER = 2
@@ -55,7 +55,7 @@ class HybridAStar:
                 yield node
 
     def calc_next_node(self, current, steer, direction, config, ox, oy, kd_tree):
-        ############## get next node #####################
+        ############## get next node: car move + collision check #####################
         x, y, yaw = current.x_list[-1], current.y_list[-1], current.yaw_list[-1]
 
         arc_l = self.XY_GRID_RESOLUTION * 1.5
@@ -94,14 +94,15 @@ class HybridAStar:
 
         return node
 
-    def is_same_grid(self, n1, n2):
-        if n1.x_index == n2.x_index \
-                and n1.y_index == n2.y_index \
-                and n1.yaw_index == n2.yaw_index:
-            return True
-        return False
+    # def is_same_grid(self, n1, n2):
+    #     if n1.x_index == n2.x_index \
+    #             and n1.y_index == n2.y_index \
+    #             and n1.yaw_index == n2.yaw_index:
+    #         return True
+    #     return False
 
     def analytic_expansion(self, current, goal, ox, oy, kd_tree):
+        ############## expand at the last point with RS algorithm #####################
         start_x = current.x_list[-1]
         start_y = current.y_list[-1]
         start_yaw = current.yaw_list[-1]
@@ -135,7 +136,7 @@ class HybridAStar:
 
         if path:
             if self.show_animation:
-                plt.plot(path.x, path.y)
+                plt.plot(path.x, path.y, "g-")
             f_x = path.x[1:]
             f_y = path.y[1:]
             f_yaw = path.yaw[1:]
@@ -156,6 +157,7 @@ class HybridAStar:
         return False, None
 
     def calc_rs_path_cost(self, reed_shepp_path):
+        ############## cal RS path cost= length + switch bacjk + steer ##########
         cost = 0.0
         for length in reed_shepp_path.lengths:
             if length >= 0:  # forward
@@ -172,9 +174,9 @@ class HybridAStar:
         # steer penalty
         for course_type in reed_shepp_path.ctypes:
             if course_type != "S":  # curve
-                cost += self.STEER_COST * abs(self.car.MAX_STEER)
+                cost += self.STEER_COST * self.car.MAX_STEER ** 2
 
-        # ==steer change penalty
+        # steer change penalty
         # calc steer profile
         n_ctypes = len(reed_shepp_path.ctypes)
         u_list = [0.0] * n_ctypes
@@ -185,7 +187,7 @@ class HybridAStar:
                 u_list[i] = self.car.MAX_STEER
 
         for i in range(len(reed_shepp_path.ctypes) - 1):
-            cost += self.STEER_CHANGE_COST * abs(u_list[i + 1] - u_list[i])
+            cost += self.STEER_CHANGE_COST * (u_list[i + 1] - u_list[i]) ** 2
 
         return cost
 
@@ -214,7 +216,7 @@ class HybridAStar:
                          round(goal[2] / self.YAW_GRID_RESOLUTION), True,
                          [goal[0]], [goal[1]], [goal[2]], [True])
 
-        openList, closedList = {}, {}
+        openList, closedList = {}, {}  # openlist: gird to search, closelist: gird searched
 
         h_dp = self.dph.calc_distance_heuristic(
             goal_node.x_list[-1], goal_node.y_list[-1],
@@ -244,29 +246,27 @@ class HybridAStar:
                 plt.gcf().canvas.mpl_connect(
                     'key_release_event',
                     lambda event: [exit(0) if event.key == 'escape' else None])
-                if len(closedList.keys()) % 10 == 0:
-                    plt.pause(0.001)
+                if len(closedList.keys()) % 1000 == 0:
+                    plt.pause(0.0001)
 
             is_updated, final_path = self.update_node_with_analytic_expansion(
                 current, goal_node, config, obst[0], obst[1], obstacle_kd_tree)
 
             if is_updated:
-                print("path found")
+                print("path found!!!!!!!!")
                 break
 
-            for neighbor in self.get_neighbors(current, config, obst[0], obst[1],
-                                               obstacle_kd_tree):
+            # cal next nodes in the neighborhood with motion constraints
+            for neighbor in self.get_neighbors(current, config, obst[0], obst[1], obstacle_kd_tree):
                 neighbor_index = self.calc_index(neighbor, config)
                 if neighbor_index in closedList:
                     continue
-                if neighbor not in openList \
-                        or openList[neighbor_index].cost > neighbor.cost:
-                    heapq.heappush(
-                        pq, (self.calc_cost(neighbor, h_dp, config),
-                             neighbor_index))
+                if neighbor not in openList or openList[neighbor_index].cost > neighbor.cost:
+                    heapq.heappush(pq, (self.calc_cost(neighbor, h_dp, config), neighbor_index))
                     openList[neighbor_index] = neighbor
 
         path = self.get_final_path(closedList, final_path)
+        print("the total length for search:", len(closedList.keys()))
         return path
 
     def calc_cost(self, n, h_dp, c):
@@ -350,9 +350,9 @@ def generate_obmap():
     for i in range(10):
         ox.append(10 + i)
         oy.append(40)
-    # for i in range(10):
-    #     ox.append(20 + i)
-    #     oy.append(40)
+    for i in range(10):
+        ox.append(20 + i)
+        oy.append(40)
 
     return np.array([ox, oy])
 
@@ -361,7 +361,7 @@ def init_startpoints():
     print("Start Hybrid A* planning")
     # Set Initial parameters
     start = [10.0, 10.0, np.deg2rad(90.0)]
-    goal = [20.0, 45.0, np.deg2rad(0.0)]
+    goal = [30.0, 15.0, np.deg2rad(0.0)]
     obst = generate_obmap()
 
     print("start : ", start)
@@ -392,6 +392,7 @@ def main():
         plt.grid(True)
         plt.axis("equal")
 
+    print(1)
     path = planner.hybrid_a_star_planning(start, goal, obst)
 
     save_planned_path(path, planner, obst)

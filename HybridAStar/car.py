@@ -26,9 +26,11 @@ class CarModel:
         self.W_BUBBLE_DIST = (self.LF - self.LB) / 2.0
         self.W_BUBBLE_R = sqrt(((self.LF + self.LB) / 2.0) ** 2 + 1)
 
-        # vehicle rectangle vertices
-        self.VRX = [self.LF, self.LF, -self.LB, -self.LB, self.LF]  # need 5 edges to draw all vertices
-        self.VRY = [self.W / 2, -self.W / 2, -self.W / 2, self.W / 2, self.W / 2]
+        # vehicle rectangle vertices need at least 5 edges to draw all vertices
+        self.VRX = [self.LF, self.LF, -self.LB, -self.LB,
+                    0., 0., 0., self.LF, ]  #
+        self.VRY = [self.W / 2, -self.W / 2, -self.W / 2, self.W / 2,
+                    self.W / 2, -self.W / 2, self.W / 2, self.W / 2]
 
     def check_car_collision(self, x_list, y_list, yaw_list, ox, oy, kd_tree):
         for i_x, i_y, i_yaw in zip(x_list, y_list, yaw_list):
@@ -76,10 +78,10 @@ class CarModel:
     def plot_car(self, x, y, yaw):
         car_color = '-k'
         c, s = cos(yaw), sin(yaw)
-        rot = Rot.from_euler('z', -yaw).as_matrix()[0:2, 0:2]
+        rot = Rot.from_euler('z', yaw).as_matrix()[0:2, 0:2]
         car_outline_x, car_outline_y = [], []
         for rx, ry in zip(self.VRX, self.VRY):
-            converted_xy = np.stack([rx, ry]).T @ rot
+            converted_xy = rot @ np.stack([rx, ry])
             car_outline_x.append(converted_xy[0] + x)
             car_outline_y.append(converted_xy[1] + y)
 
@@ -100,7 +102,7 @@ class CarModel:
 
 
 def main():
-    x, y, yaw = 0., 0., 1.
+    x, y, yaw = 0., 0., 0.
     plt.axis('equal')
     car = CarModel()
     car.plot_car(x, y, yaw)

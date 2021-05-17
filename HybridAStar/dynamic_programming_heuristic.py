@@ -10,10 +10,10 @@ See Wikipedia article (https://en.wikipedia.org/wiki/A*_search_algorithm)
 
 import heapq
 import math
-
+import numpy as np
 import matplotlib.pyplot as plt
 
-show_animation = False
+show_animation = True
 
 
 class Node:
@@ -171,3 +171,58 @@ class DynamicProgrammingHeuristic:
                   [1, 1, math.sqrt(2)]]
 
         return motion
+
+
+def generate_obmap():
+    ox, oy = [], []
+    for i in range(10):
+        ox.append(i)
+        oy.append(25)
+    for i in range(40):  # 60
+        ox.append(i)
+        oy.append(0.0)
+    # for i in range(60):
+    #     ox.append(60.0)
+    #     oy.append(i)
+    for i in range(41):  # 61
+        ox.append(i)
+        oy.append(60.0)
+    for i in range(61):
+        ox.append(0.0)
+        oy.append(i)
+    for i in range(40):
+        ox.append(20.0)
+        oy.append(i)
+    for i in range(60):
+        ox.append(40.0)
+        oy.append(i)
+    for i in range(10):
+        ox.append(25.0)
+        oy.append(60 - i)
+    for i in range(10):
+        ox.append(10 + i)
+        oy.append(40)
+    for i in range(10):
+        ox.append(20 + i)
+        oy.append(40)
+
+    return np.array([ox, oy])
+
+
+def init_startpoints():
+    print("Start Hybrid A* planning")
+    # Set Initial parameters
+    start = [10.0, 10.0, np.deg2rad(90.0)]
+    goal = [30.0, 15.0, np.deg2rad(0.0)]
+    obst = generate_obmap()
+
+    print("start : ", start)
+    print("goal : ", goal)
+    return start, goal, obst
+
+
+if __name__ == '__main__':
+    start, goal, obst = init_startpoints()
+    dph = DynamicProgrammingHeuristic()
+    dph.calc_distance_heuristic(30., 30., obst[0], obst[1], 8, 10)
+
