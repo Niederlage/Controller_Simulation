@@ -5,8 +5,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.linalg
-from MPC_Module_Family import MPC, MPC_Reference
-from reeds_shepp_path_planning import ReedsSheppPathPlanning
+from MPC_Module_Family import MPC_Reference
+from MPC_with_RS.casadi_MPC.reeds_shepp_path_planning import ReedsSheppPathPlanning
 import yaml
 
 
@@ -125,6 +125,7 @@ if __name__ == '__main__':
     px, py, pyaw, mode, clen = rs.reeds_shepp_path_planning(
         start[0], start[1], start[2] * np.pi / 180, goal[0], goal[1], goal[2] * np.pi / 180, 0.5, step_size=0.1)
     ref_traj = np.array([px, py, pyaw])
+    np.savez("../casadi_MPC/saved_traj.npz", saved_traj=ref_traj)
 
     mpc = MPC_Reference(param, ref_traj=ref_traj)
     start[2] *= np.pi / 180

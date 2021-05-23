@@ -60,7 +60,7 @@ if __name__ == '__main__':
     test_track = np.array([[0, 1, 1.5, 1., 0.],
                            [0, 1, 1.1, 1.9, 1.5]])
 
-    test_traj = np.load("saved_traj.npz", allow_pickle=True)
+    test_traj = np.load("./raw_MPC/saved_traj.npz", allow_pickle=True)
     trackx = test_traj["traj"][0]
     tracky = test_traj["traj"][1]
     trackth = np.array(test_traj["traj"][2])
@@ -81,6 +81,7 @@ if __name__ == '__main__':
     ax = plt.subplot(311)
     ax.plot(cal_path[0, :], cal_path[1, :], ".", label="interpolated tracks")
     ax.plot(run_track[0, :], run_track[1, :], ".", label="original tracks")
+    ax.axis("equal")
     ax.legend()
 
     ax = plt.subplot(312)

@@ -238,17 +238,6 @@ class MPC_OB(MPC_Reference):
 
         m.sumobj = m.ctexobj + m.cteyobj + m.epsiobj + m.vobj + m.uoobj + m.ujobj + m.suoobj + m.timeobj + m.distanceobj + m.goalobj
 
-        # if obst is not None:
-        #     m.obstobj = 0
-        #     l_obst = len(obst.T)
-        #     for i in m.sNum:
-        #         ox = obst[0, :]
-        #         oy = obst[1, :]
-        #         dx = np.repeat([[m.states[0, i]]], l_obst, axis=1) - ox[None, :]
-        #         dy = np.repeat([[m.states[1, i]]], l_obst, axis=1) - oy[None, :]
-        #         dist_min = np.power(dx, 2) + np.power(dy, 2)
-        #         m.obstobj += 9.8e-3 * m.wg[1] * np.sum(dist_min)
-
         m.obstobj = 0
         for i in m.N_ob:
             for j in m.sNum:

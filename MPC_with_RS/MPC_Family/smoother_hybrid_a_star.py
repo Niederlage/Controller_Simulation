@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.linalg
 from MPC_Module_Family import MPC_Reference, MPC_OB
-from reeds_shepp_path_planning import ReedsSheppPathPlanning
+from MPC_with_RS.casadi_MPC.reeds_shepp_path_planning import ReedsSheppPathPlanning
 import yaml
 
 
@@ -16,7 +16,9 @@ class UTurnMPC():
         self.dt = 1e-1
         self.robot_length = 0.5
         self.robot_width = 0.3
+        self.predicted_trajectory = None
         self.optimal_dt = None
+        self.show_animation = True
 
     def motion_model(self, zst, u_in, dt):
         vr = u_in[0]
@@ -47,14 +49,14 @@ class UTurnMPC():
                   head_length=width, head_width=width)
         plt.plot(x, y)
 
-    def plot_robot(self, x, y, yaw, config):  # pragma: no cover
+    def plot_robot(self, x, y, yaw):  # pragma: no cover
 
-        outline = np.array([[-config.robot_length / 2, config.robot_length / 2,
-                             (config.robot_length / 2), -config.robot_length / 2,
-                             -config.robot_length / 2],
-                            [config.robot_width / 2, config.robot_width / 2,
-                             - config.robot_width / 2, -config.robot_width / 2,
-                             config.robot_width / 2]])
+        outline = np.array([[-self.robot_length / 2, self.robot_length / 2,
+                             (self.robot_length / 2), -self.robot_length / 2,
+                             -self.robot_length / 2],
+                            [self.robot_width / 2, self.robot_width / 2,
+                             - self.robot_width / 2, -self.robot_width / 2,
+                             self.robot_width / 2]])
         Rot1 = np.array([[np.cos(yaw), np.sin(yaw)],
                          [-np.sin(yaw), np.cos(yaw)]])
         outline = (outline.T.dot(Rot1)).T
@@ -68,14 +70,10 @@ class UTurnMPC():
         f = plt.figure()
         while True:
 
-            zst[:3] = ut.motion_model(zst[:3], u_op[:, k], ut.dt)  # simulate robot
-
-            e_lon = zst[0] - predicted_trajectory[0][1]
-            e_lat = zst[1] - predicted_trajectory[1][1]
-            zst[-2:] = np.array([e_lon, e_lat])
+            zst[:3] = self.motion_model(zst[:3], u_op[:, k], self.dt)  # simulate robot
             trajectory = np.vstack((trajectory, zst))  # store state history
 
-            if show_animation:
+            if self.show_animation:
                 plt.cla()
                 # for stopping simulation with the esc key.
                 plt.gcf().canvas.mpl_connect(
@@ -83,18 +81,18 @@ class UTurnMPC():
                     lambda event: [exit(0) if event.key == 'escape' else None])
 
                 plt.plot(zst[0], zst[1], "xr")
-                self.plot_robot(zst[0], zst[1], zst[2], ut)
+                self.plot_robot(zst[0], zst[1], zst[2])
                 self.plot_arrow(zst[0], zst[1], zst[2])
-                plt.plot(predicted_trajectory[0], predicted_trajectory[1], "-g", label="MPC prediciton")
+                plt.plot(self.predicted_trajectory[0, :], self.predicted_trajectory[1, :], "-g", label="MPC prediciton")
                 if ref_traj is not None:
                     plt.plot(ref_traj[0], ref_traj[1], "-", color="orange", label="Hybrid A* reference")
-                plt.plot(predicted_trajectory[0][-1], predicted_trajectory[1][-1], "x", color="purple")
+                plt.plot(self.predicted_trajectory[0, -1], self.predicted_trajectory[1, -1], "x", color="purple")
                 plt.plot(trajectory[:, 0], trajectory[:, 1], "-r")
                 if obst is not None:
                     plt.plot(obst[0], obst[1], "o", color="black", label="obstacles")
                 plt.legend()
-                if plot_goal:
-                    plt.plot(goal[0], goal[1], "xb")
+
+                plt.plot(ref_traj[0, -1], ref_traj[1, -1], "xb")
 
                 plt.axis("equal")
                 plt.grid(True)
@@ -153,7 +151,6 @@ if __name__ == '__main__':
         mpc = MPC_OB(param, ref_traj=ref_traj, obst=ob)
 
     zst = np.hstack((start, np.array([0., 0., 0., 0.])))
-    coefficients = np.array([1, 1, 1, 1])
     trajectory = np.copy(zst)
 
     predicted_trajectory, u_op = mpc.Solve(zst, goal, coeffs=coefficients)
