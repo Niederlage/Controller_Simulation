@@ -8,10 +8,11 @@ import numpy as np
 
 class UTurnMPC():
     def __init__(self):
-        self.L = 1.0
+        self.L = 2.0
         self.dt = 1e-1
-        self.robot_length = 0.5
-        self.robot_width = 0.3
+        self.W = 2.  # width of car
+        self.LF = 4.  # distance from rear to vehicle front end
+        self.LB = 1.  # distance from rear to vehicle back end
         self.predicted_trajectory = None
         self.optimal_dt = None
         self.show_animation = True
@@ -36,12 +37,10 @@ class UTurnMPC():
 
     def plot_robot(self, x, y, yaw):  # pragma: no cover
 
-        outline = np.array([[-self.robot_length / 2, self.robot_length / 2,
-                             (self.robot_length / 2), -self.robot_length / 2,
-                             -self.robot_length / 2],
-                            [self.robot_width / 2, self.robot_width / 2,
-                             - self.robot_width / 2, -self.robot_width / 2,
-                             self.robot_width / 2]])
+        outline = np.array([
+            [self.LF, self.LF, -self.LB, -self.LB, self.LF],
+            [self.W / 2, -self.W / 2, - self.W / 2, self.W / 2, self.W / 2]])
+
         Rot1 = np.array([[np.cos(yaw), np.sin(yaw)],
                          [-np.sin(yaw), np.cos(yaw)]])
         outline = (outline.T.dot(Rot1)).T
@@ -49,6 +48,9 @@ class UTurnMPC():
         outline[1, :] += y
         plt.plot(np.array(outline[0, :]).flatten(),
                  np.array(outline[1, :]).flatten(), "-k")
+
+        arrow_x, arrow_y, arrow_yaw = np.cos(yaw) * 1.5 + x, np.sin(yaw) * 1.5 + y, yaw
+        self.plot_arrow(arrow_x, arrow_y, arrow_yaw)
 
     def try_tracking(self, zst, u_op, trajectory, obst=None, ref_traj=None):
         k = 0
@@ -66,9 +68,10 @@ class UTurnMPC():
 
                 if ref_traj is not None:
                     plt.plot(ref_traj[0, :], ref_traj[1, :], "-", color="orange", label="warm start reference")
+
                 plt.plot(zst[0], zst[1], "xr")
                 self.plot_robot(zst[0], zst[1], zst[2])
-                self.plot_arrow(zst[0], zst[1], zst[2])
+
                 plt.plot(self.predicted_trajectory[0, :], self.predicted_trajectory[1, :], "-g", label="MPC prediciton")
                 plt.plot(trajectory[:, 0], trajectory[:, 1], "-r")
                 if obst is not None:
@@ -87,6 +90,12 @@ class UTurnMPC():
                 break
 
         return trajectory
+
+    def cal_distance(self, op_trajectories, iteration):
+        diff_s = np.diff(np.array(op_trajectories), axis=1)
+        sum_s = np.sum(np.hypot(diff_s[0, :], diff_s[1, :]))
+        print("total number for iteration: ", iteration)
+        print("total covered distance:{:.3f}m".format(sum_s))
 
 
 if __name__ == '__main__':
