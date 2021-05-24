@@ -59,13 +59,13 @@ def monte_carlo_sample_test(constraints):
 
 def get_polygon_map(use_sample_test=False):
     obst1 = np.array([[0, 0],
+                      [15, 0],
+                      [15, 10],
                       [0, 10],
-                      [16, 10],
-                      [16, 0],
                       [0, 0]])
-    tf_1 = np.array([22, 0, 0])
+    tf_1 = np.array([24, 0, 0])
     obst2 = Euclidean_Transform(obst1, tf_1)
-    tf_2 = np.array([38 / 16, 1.])[:, None]
+    tf_2 = np.array([40 / 15, 0.6])[:, None]
     obst3 = np.copy(Scale_Transformation(obst1, tf_2))
     obst3 = Euclidean_Transform(obst3, np.array([0, 16, 0]))
     # obst3 = Scale_Transformation(obst3, np.array([0.6, 1.1]))
@@ -145,7 +145,7 @@ if __name__ == '__main__':
         sample_test = True
 
     obmap, samples = get_polygon_map(use_sample_test=sample_test)
-    pointmap = get_point_map(obmap, 0.5)
+    pointmap = get_point_map(obmap, 0.2)
 
     if save_map:
         pointmap_ = np.block([pointmap[0].T, pointmap[1].T, pointmap[2].T]).T
@@ -167,8 +167,8 @@ if __name__ == '__main__':
             ax.plot(ob_[:, 0], ob_[:, 1], "b-")
         for ob_ in pointmap:
             ax.plot(ob_[:, 0], ob_[:, 1], "o", color="black")
-        ax.plot(15, 6, "gx", label="start")
-        ax.plot(10, 2, "rx", label="goal")
+        ax.plot(30, 14, "gx", label="start")
+        ax.plot(20, 3, "rx", label="goal")
     ax.grid()
     plt.axis("equal")
     plt.show()

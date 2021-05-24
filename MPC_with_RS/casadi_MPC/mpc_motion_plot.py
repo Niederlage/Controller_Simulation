@@ -67,7 +67,7 @@ class UTurnMPC():
                     lambda event: [exit(0) if event.key == 'escape' else None])
 
                 if ref_traj is not None:
-                    plt.plot(ref_traj[0, :], ref_traj[1, :], "-", color="orange", label="warm start reference")
+                    plt.plot(ref_traj[0, 1:], ref_traj[1, 1:], "-", color="orange", label="warm start reference")
 
                 plt.plot(zst[0], zst[1], "xr")
                 self.plot_robot(zst[0], zst[1], zst[2])

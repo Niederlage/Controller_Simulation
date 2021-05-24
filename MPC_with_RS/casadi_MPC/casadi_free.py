@@ -206,7 +206,7 @@ if __name__ == '__main__':
     test_mpc_rs = False
     test_mpc_obca = True
 
-    loadtraj = np.load("../saved_hybrid_a_star.npz")
+    loadtraj = np.load("../../saved_hybrid_a_star.npz")
     ref_traj = loadtraj["saved_traj"]
     loadmap = np.load("saved_obmap.npz")
     ob = loadmap["pointmap"]

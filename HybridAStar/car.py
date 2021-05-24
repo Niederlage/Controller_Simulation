@@ -15,13 +15,13 @@ from scipy.spatial.transform import Rotation as Rot
 
 class CarModel:
     def __init__(self):
-        self.WB = 3.  # rear to front wheel [m]
+        self.WB = 2.  # rear to front wheel [m]
         self.W = 2.  # width of car
         self.LF = 3.5  # distance from rear to vehicle front end
         self.LB = 1.0  # distance from rear to vehicle back end
         self.MAX_STEER = 0.6  # [rad] maximum steering angle
-        self.SAFE_FRONT = self.LF + 0.3
-        self.SAFE_BACK = self.LB + 0.3
+        self.SAFE_FRONT = self.LF + 0.1
+        self.SAFE_BACK = self.LB + 0.1
         self.SAFE_WIDTH = self.W + 2
         self.W_BUBBLE_DIST = (self.LF - self.LB) / 2.0
         self.W_BUBBLE_R = sqrt(((self.LF + self.LB) / 2.0) ** 2 + 1)

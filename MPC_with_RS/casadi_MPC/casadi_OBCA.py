@@ -118,7 +118,7 @@ class CasADi_MPC:
         obj = self.wg[4] * sum_total_dist + self.wg[3] * sum_time \
               + self.wg[3] * sum_vel + self.wg[3] * sum_steer \
               + self.wg[3] * sum_a + self.wg[3] * sum_steer_rate \
-              + self.wg[1] * sum_dist_to_ref
+              + self.wg[2] * sum_dist_to_ref
 
         return obj
 
@@ -154,7 +154,7 @@ class CasADi_MPC:
             ubg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, i] = ca.inf
 
             # constraint3  norm_2(Aj.T @ lambdaj) - 1
-            lbg[6 + 3 * self.obst_num:6 + 4 * self.obst_num, i] = 0.
+            lbg[6 + 3 * self.obst_num:6 + 4 * self.obst_num, i] = -10.
             ubg[6 + 3 * self.obst_num:6 + 4 * self.obst_num, i] = 0.
 
         lbx[0, 0] = start[0]
@@ -229,8 +229,8 @@ class CasADi_MPC:
         nlp = {"x": X, "f": F, "g": G}
         opts_setting = {"expand": True,
                         "ipopt.hessian_approximation": "limited-memory",
-                        'ipopt.max_iter': 100,
-                        'ipopt.print_level': 2,
+                        'ipopt.max_iter': 500,
+                        'ipopt.print_level': 3,
                         'print_time': 1,
                         'ipopt.acceptable_tol': 1e-8,
                         'ipopt.acceptable_obj_change_tol': 1e-6}
@@ -277,9 +277,9 @@ if __name__ == '__main__':
     test_mpc_rs = False
     test_mpc_obca = True
 
-    loadtraj = np.load("../saved_hybrid_a_star.npz")
+    loadtraj = np.load("../../saved_hybrid_a_star.npz")
     ref_traj = loadtraj["saved_traj"]
-    loadmap = np.load("saved_obmap.npz")
+    loadmap = np.load("../../MPC_with_RS/saved_obmap.npz")
     ob = loadmap["pointmap"]
     ob_constraint_mat = loadmap["constraint_mat"]
     obst = []
@@ -289,9 +289,15 @@ if __name__ == '__main__':
     ut = UTurnMPC()
     start = ref_traj[:, 0]
     goal = ref_traj[:, -1]
+    # anticlockwise
     car_outline = np.array([
         [ut.LF, -ut.LB, -ut.LB, ut.LF, ut.LF],
         [ut.W / 2, ut.W / 2, - ut.W / 2, -ut.W / 2, ut.W / 2]])
+    # clockwise
+    # car_outline = np.array(
+    #     [[-ut.LB, -ut.LB, -ut.LF, ut.LF, -ut.LB],
+    #      [ut.W / 2, -ut.W / 2, ut.W / 2, -ut.W / 2, ut.W / 2]])
+
     shape = cal_coeff_mat(car_outline.T)
     # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
     cmpc = CasADi_MPC()
