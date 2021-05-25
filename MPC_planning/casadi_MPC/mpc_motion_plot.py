@@ -4,6 +4,7 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
+from gears.polygon_generator import cal_coeff_mat
 
 
 class UTurnMPC():
@@ -11,7 +12,7 @@ class UTurnMPC():
         self.L = 2.0
         self.dt = 1e-1
         self.W = 2.  # width of car
-        self.LF = 4.  # distance from rear to vehicle front end
+        self.LF = 3.  # distance from rear to vehicle front end
         self.LB = 1.  # distance from rear to vehicle back end
         self.predicted_trajectory = None
         self.optimal_dt = None
@@ -36,14 +37,22 @@ class UTurnMPC():
         plt.plot(x, y)
 
     def plot_robot(self, x, y, yaw):  # pragma: no cover
-
+        # # 90 grad
+        # outline = np.array([[self.W / 2, -self.W / 2, - self.W / 2, self.W / 2, self.W / 2],
+        #                     [self.LF, self.LF, -self.LB, -self.LB, self.LF]])
+        # old
         outline = np.array([
             [self.LF, self.LF, -self.LB, -self.LB, self.LF],
             [self.W / 2, -self.W / 2, - self.W / 2, self.W / 2, self.W / 2]])
 
-        Rot1 = np.array([[np.cos(yaw), np.sin(yaw)],
-                         [-np.sin(yaw), np.cos(yaw)]])
-        outline = (outline.T.dot(Rot1)).T
+        # outline = np.array([[1., -1, -1, 1, 1],
+        #                     [1, 1, -1, -1, 1]])
+        # outline[0, :] *= self.LF
+        # outline[1, :] *= self.W / 2
+
+        Rot1 = np.array([[np.cos(yaw), -np.sin(yaw)],
+                         [np.sin(yaw), np.cos(yaw)]])
+        outline = Rot1 @ outline
         outline[0, :] += x
         outline[1, :] += y
         plt.plot(np.array(outline[0, :]).flatten(),
@@ -75,7 +84,8 @@ class UTurnMPC():
                 plt.plot(self.predicted_trajectory[0, :], self.predicted_trajectory[1, :], "-g", label="MPC prediciton")
                 plt.plot(trajectory[:, 0], trajectory[:, 1], "-r")
                 if obst is not None:
-                    plt.plot(obst[0], obst[1], "o", color="black", label="obstacles")
+                    for obi in obst:
+                        plt.plot(obi[:, 0], obi[:, 1], "o", color="black", label="obstacles")
                 plt.legend()
                 plt.plot(ref_traj[0, -1], ref_traj[1, -1], "xb")
                 plt.plot(self.predicted_trajectory[0, -1], self.predicted_trajectory[1, -1], "x", color="purple")
@@ -96,6 +106,42 @@ class UTurnMPC():
         sum_s = np.sum(np.hypot(diff_s[0, :], diff_s[1, :]))
         print("total number for iteration: ", iteration)
         print("total covered distance:{:.3f}m".format(sum_s))
+
+
+def initialize_saved_data():
+    loadtraj = np.load("../data/saved_hybrid_a_star.npz")
+    ref_traj = loadtraj["saved_traj"]
+    loadmap = np.load("../data/saved_obmap.npz", allow_pickle=True)
+    ob1 = loadmap["pointmap"][0]
+    ob2 = loadmap["pointmap"][1]
+    ob3 = loadmap["pointmap"][2]
+    ob = [ob1, ob2, ob3]
+
+    ob_constraint_mat = loadmap["constraint_mat"]
+    obst = []
+    obst.append(ob_constraint_mat[:4, :])
+    obst.append(ob_constraint_mat[4:8, :])
+    obst.append(ob_constraint_mat[8:12, :])
+
+    return ref_traj, ob, obst
+
+
+def get_car_shape(ut):
+    # # anticlockwise
+    # car_outline = np.array([
+    #     [ut.LF, -ut.LB, -ut.LB, ut.LF, ut.LF],
+    #     [ut.W / 2, ut.W / 2, - ut.W / 2, -ut.W / 2, ut.W / 2]])
+    # # 90 grad
+    # car_outline = np.array([[1., -1, -1, 1, 1],
+    #                         [1, 1, -1, -1, 1]])
+    # car_outline[0, :] *= 2
+    # car_outline[1, :] *= 1
+    # clockwise
+    car_outline = np.array(
+        [[-ut.LB, ut.LF, ut.LF, ut.LB, -ut.LB],
+         [ut.W / 2, ut.W / 2, -ut.W / 2, -ut.W / 2, ut.W / 2]])
+
+    return cal_coeff_mat(car_outline.T)
 
 
 if __name__ == '__main__':

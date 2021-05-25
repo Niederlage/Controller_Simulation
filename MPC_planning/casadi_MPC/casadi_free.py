@@ -199,6 +199,40 @@ class CasADi_MPC:
         op_trajectories = np.array(cal_traj[:3, :])
         return op_dt, op_trajectories, op_controls
 
+def initialize_saved_data():
+    loadtraj = np.load("../data/saved_hybrid_a_star.npz")
+    ref_traj = loadtraj["saved_traj"]
+    loadmap = np.load("../data/saved_obmap.npz", allow_pickle=True)
+    ob1 = loadmap["pointmap"][0]
+    ob2 = loadmap["pointmap"][1]
+    ob3 = loadmap["pointmap"][2]
+    ob = [ob1, ob2, ob3]
+
+    ob_constraint_mat = loadmap["constraint_mat"]
+    obst = []
+    obst.append(ob_constraint_mat[:4, :])
+    obst.append(ob_constraint_mat[4:8, :])
+    obst.append(ob_constraint_mat[8:12, :])
+
+    return ref_traj, ob, obst
+
+
+def get_car_shape(ut):
+    # # anticlockwise
+    # car_outline = np.array([
+    #     [ut.LF, -ut.LB, -ut.LB, ut.LF, ut.LF],
+    #     [ut.W / 2, ut.W / 2, - ut.W / 2, -ut.W / 2, ut.W / 2]])
+    # # 90 grad
+    # car_outline = np.array([[1., -1, -1, 1, 1],
+    #                         [1, 1, -1, -1, 1]])
+    # car_outline[0, :] *= 2
+    # car_outline[1, :] *= 1
+    # clockwise
+    car_outline = np.array(
+        [[-ut.LB, ut.LF, ut.LF, ut.LB, -ut.LB],
+         [ut.W / 2, ut.W / 2, -ut.W / 2, -ut.W / 2, ut.W / 2]])
+
+    return cal_coeff_mat(car_outline.T)
 
 if __name__ == '__main__':
 
@@ -206,30 +240,16 @@ if __name__ == '__main__':
     test_mpc_rs = False
     test_mpc_obca = True
 
-    loadtraj = np.load("../../saved_hybrid_a_star.npz")
-    ref_traj = loadtraj["saved_traj"]
-    loadmap = np.load("saved_obmap.npz")
-    ob = loadmap["pointmap"]
-    ob_constraint_mat = loadmap["constraint_mat"]
-    obst = []
-    obst.append(ob_constraint_mat[:4, :])
-    obst.append(ob_constraint_mat[4:8, :])
-    obst.append(ob_constraint_mat[8:12, :])
     ut = UTurnMPC()
-    start = ref_traj[:, 0]
-    goal = ref_traj[:, -1]
-    car_outline = np.array([
-        [ut.LF, ut.LF, -ut.LB, -ut.LB, ut.LF],
-        [ut.W / 2, -ut.W / 2, - ut.W / 2, ut.W / 2, ut.W / 2]])
-    shape = cal_coeff_mat(car_outline.T)
+    ref_traj, ob, obst = initialize_saved_data()
+
     # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
     cmpc = CasADi_MPC()
-    # cmpc.init_model(ref_traj)
     cmpc.init_model(ref_traj)
     op_dt, op_trajectories, op_controls = cmpc.get_result()
 
     ut.predicted_trajectory = op_trajectories
-    zst = start
+    zst = ref_traj[:, 0]
     trajectory = np.copy(zst)
 
     ut.cal_distance(op_trajectories[:2, :], cmpc.horizon)
@@ -247,7 +267,7 @@ if __name__ == '__main__':
     ax1.legend()
 
     if tracking:
-        trajectory = ut.try_tracking(zst, op_controls, trajectory, obst=ob.T, ref_traj=ref_traj)
+        trajectory = ut.try_tracking(zst, op_controls, trajectory, obst=ob, ref_traj=ref_traj)
         print("Done")
 
     plt.show()
