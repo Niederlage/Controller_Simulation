@@ -1,23 +1,29 @@
 import casadi as ca
 import numpy as np
 from mpc_motion_plot import UTurnMPC
-from gears.polygon_generator import cal_coeff_mat
 
 
 class CasADi_MPC_WarmUp:
     def __init__(self):
         self.base = 2.0
-        self.nx = 8
+        self.LF = 3.
+        self.LB = 1.
+        self.offset = (self.LF - self.LB) / 2
+
         self.ng = 6
         self.model = None
         self.d_opt = None
+        self.op_dist0 = None
+        self.op_lambda0 = None
+        self.op_mu0 = None
+
         self.obst_num = 0
         self.horizon = 0
         self.alpha = 1.2
         self.dt = 0.
 
         self.wg = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1]
-        self.dmin = 0.
+        self.dmin = 0.1
 
     def adapt_g_shape(self):
         self.ng = self.obst_num * 4
@@ -39,8 +45,11 @@ class CasADi_MPC_WarmUp:
         for i in range(self.horizon - 1):
             mu_i = mu_[:, i]
             yaw_i = x0[2, i]
+            offset = ca.SX.zeros(2, 1)
+            offset[0, 0] = self.offset * ca.cos(yaw_i)
+            offset[1, 0] = self.offset * ca.sin(yaw_i)
+            t_i = x0[:2, i] - offset
 
-            t_i = x0[:2, i]
             rotT_i = ca.SX.zeros(2, 2)
             rotT_i[0, 0] = ca.cos(yaw_i)
             rotT_i[1, 1] = ca.cos(yaw_i)
@@ -55,7 +64,7 @@ class CasADi_MPC_WarmUp:
                 constraint1 = rotT_i @ Aj.T @ lambdaj + GT @ mu_i
                 constraint2 = (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i + d_[j, i]
                 temp = Aj.T @ lambdaj
-                constraint3 = ca.power(temp[0, 0], 2) + ca.power(temp[1, 0], 2) - 1.
+                constraint3 = ca.sumsqr(temp)
 
                 gx[j, i] = constraint1[0, 0]
                 gx[j + l_ob, i] = constraint1[1, 0]
@@ -79,19 +88,19 @@ class CasADi_MPC_WarmUp:
         ubg = ca.DM(self.ng, self.horizon - 1)
 
         for i in range(self.horizon - 1):
-            lbx[0:self.obst_num, i] = -ca.inf  # dist
+            lbx[0:self.obst_num, i] = -10.  # dist
             lbx[self.obst_num:, i] = 0.  # lambda, mu
 
             ubx[0:self.obst_num, i] = 0.  # dist
             ubx[self.obst_num:, i] = ca.inf  # lambda, mu
 
             # # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i
-            # lbg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, i] = 0.
-            # ubg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, i] = ca.inf
+            lbg[2 * self.obst_num:3 * self.obst_num, i] = 0.
+            ubg[2 * self.obst_num:3 * self.obst_num, i] = 1.
 
             # constraint3  norm_2(Aj.T @ lambdaj) - 1
-            lbg[3 * self.obst_num:, i] = -ca.inf
-            ubg[3 * self.obst_num:, i] = 0.
+            lbg[3 * self.obst_num:, i] = 1.
+            ubg[3 * self.obst_num:, i] = 1.
 
         lbx_ = ca.reshape(lbx, -1, 1)
         ubx_ = ca.reshape(ubx, -1, 1)
@@ -103,17 +112,20 @@ class CasADi_MPC_WarmUp:
 
     def x0_initialization(self, reference_path):
 
-        x0 = ca.DM(self.nx, self.horizon)
+        x0 = ca.DM(3, self.horizon)
         for i in range(self.horizon):
             x0[0, i] = reference_path[0, i]
             x0[1, i] = reference_path[1, i]
             x0[2, i] = reference_path[2, i]
-            x0[3:, i] = 0.
 
         return x0
 
     def dual_variables_initialization(self):
-        t0 = ca.DM.ones(self.obst_num + (self.obst_num + 1) * 4, self.horizon) * 1e-1
+        t0 = ca.DM.ones(self.obst_num + (self.obst_num + 1) * 4, self.horizon) * 1e-2
+        if (self.op_dist0 is not None) and (self.op_lambda0 is not None) and (self.op_mu0 is not None):
+            t0[:self.obst_num, :] = self.op_dist0
+            t0[self.obst_num:5 * self.obst_num, :] = self.op_lambda0
+            t0[5 * self.obst_num:, :] = self.op_mu0
         return t0
 
     def init_model_warmup(self, reference_path, shape_m, obst_m):
@@ -142,9 +154,9 @@ class CasADi_MPC_WarmUp:
         nlp = {"x": X, "f": F, "g": G}
         opts_setting = {"expand": True,
                         "ipopt.hessian_approximation": "limited-memory",
-                        'ipopt.max_iter': 100,
-                        'ipopt.print_level': 1,
-                        'print_time': 1,
+                        'ipopt.max_iter': 200,
+                        'ipopt.print_level': 0,
+                        'print_time': 0,
                         'ipopt.acceptable_tol': 1e-8,
                         'ipopt.acceptable_obj_change_tol': 1e-6}
 
@@ -176,31 +188,12 @@ class CasADi_MPC_WarmUp:
 
 
 if __name__ == '__main__':
-    tracking = True
-    loadtraj = np.load("../data/saved_hybrid_a_star.npz")
-    ref_traj = loadtraj["saved_traj"]
-    loadmap = np.load("../data/saved_obmap.npz", allow_pickle=True)
-    ob1 = loadmap["pointmap"][0]
-    ob2 = loadmap["pointmap"][1]
-    ob3 = loadmap["pointmap"][2]
-    ob = [ob1, ob2, ob3]
-
-    ob_constraint_mat = loadmap["constraint_mat"]
-    obst = []
-    obst.append(ob_constraint_mat[:4, :])
-    obst.append(ob_constraint_mat[4:8, :])
-    obst.append(ob_constraint_mat[8:12, :])
     ut = UTurnMPC()
-
-    # clockwise
-    car_outline = np.array(
-        [[-ut.LB, ut.LF, ut.LF, ut.LB, -ut.LB],
-         [ut.W / 2, ut.W / 2, -ut.W / 2, -ut.W / 2, ut.W / 2]])
-
-    shape = cal_coeff_mat(car_outline.T)
+    ref_traj, ob, obst = ut.initialize_saved_data()
+    shape = ut.get_car_shape()
 
     cmpc = CasADi_MPC_WarmUp()
     cmpc.init_model_warmup(ref_traj, shape, obst)
     op_dist, op_lambda, op_mu = cmpc.get_result_warmup()
     np.savez("../data/saved_OBCA_warmup.npz", op_d=op_dist, op_lambda=op_lambda, op_mu=op_mu)
-    print("optimal warm-up successful")
+    print("optimal warm-up successful!")

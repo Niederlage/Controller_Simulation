@@ -31,7 +31,7 @@ class UTurnMPC():
 
         return np.array([x, y, th])
 
-    def plot_arrow(self, x, y, yaw, length=0.5, width=0.1):  # pragma: no cover
+    def plot_arrow(self, x, y, yaw, length=1.5, width=0.5):  # pragma: no cover
         plt.arrow(x, y, length * np.cos(yaw), length * np.sin(yaw),
                   head_length=width, head_width=width)
         plt.plot(x, y)
@@ -45,11 +45,6 @@ class UTurnMPC():
             [self.LF, self.LF, -self.LB, -self.LB, self.LF],
             [self.W / 2, -self.W / 2, - self.W / 2, self.W / 2, self.W / 2]])
 
-        # outline = np.array([[1., -1, -1, 1, 1],
-        #                     [1, 1, -1, -1, 1]])
-        # outline[0, :] *= self.LF
-        # outline[1, :] *= self.W / 2
-
         Rot1 = np.array([[np.cos(yaw), -np.sin(yaw)],
                          [np.sin(yaw), np.cos(yaw)]])
         outline = Rot1 @ outline
@@ -58,7 +53,7 @@ class UTurnMPC():
         plt.plot(np.array(outline[0, :]).flatten(),
                  np.array(outline[1, :]).flatten(), "-k")
 
-        arrow_x, arrow_y, arrow_yaw = np.cos(yaw) * 1.5 + x, np.sin(yaw) * 1.5 + y, yaw
+        arrow_x, arrow_y, arrow_yaw = x, y, yaw
         self.plot_arrow(arrow_x, arrow_y, arrow_yaw)
 
     def try_tracking(self, zst, u_op, trajectory, obst=None, ref_traj=None):
@@ -79,17 +74,17 @@ class UTurnMPC():
                     plt.plot(ref_traj[0, 1:], ref_traj[1, 1:], "-", color="orange", label="warm start reference")
 
                 plt.plot(zst[0], zst[1], "xr")
-                self.plot_robot(zst[0], zst[1], zst[2])
-
-                plt.plot(self.predicted_trajectory[0, :], self.predicted_trajectory[1, :], "-g", label="MPC prediciton")
+                plt.plot(self.predicted_trajectory[0, :], self.predicted_trajectory[1, :], "xg", label="MPC prediciton")
                 plt.plot(trajectory[:, 0], trajectory[:, 1], "-r")
                 if obst is not None:
                     for obi in obst:
-                        plt.plot(obi[:, 0], obi[:, 1], "o", color="black", label="obstacles")
-                plt.legend()
+                        plt.plot(obi[:, 0], obi[:, 1], ".", color="black", label="obstacles")
+
                 plt.plot(ref_traj[0, -1], ref_traj[1, -1], "xb")
                 plt.plot(self.predicted_trajectory[0, -1], self.predicted_trajectory[1, -1], "x", color="purple")
+                self.plot_robot(zst[0], zst[1], zst[2])
 
+                plt.legend()
                 plt.axis("equal")
                 plt.grid(True)
                 plt.pause(0.1)
@@ -101,47 +96,111 @@ class UTurnMPC():
 
         return trajectory
 
+    def plot_results(self, op_dt, op_trajectories, op_controls, ref_traj, ob):
+
+        self.predicted_trajectory = op_trajectories
+        zst = ref_traj[:, 0]
+        trajectory = np.copy(zst)
+
+        self.cal_distance(op_trajectories[:2, :], len(ref_traj.T))
+        self.dt = op_dt
+        print("Time resolution:{:.3f}s, total time:{:.3f}s".format(self.dt, self.dt * len(ref_traj.T)))
+        # np.savez("saved_traj", traj=predicted_trajectory)
+
+        fig = plt.figure()
+        ax = plt.subplot(211)
+        ax.plot(op_controls[0, :], label="v")
+        ax.plot(op_controls[1, :], label="steer")
+        ax.plot(op_controls[2, :], "-.", label="acc")
+        ax.plot(op_controls[3, :], "-.", label="steer rate")
+        ax.plot(op_controls[4, :], "-.", label="jerk")
+        ax.grid()
+        ax.legend()
+
+        ax = plt.subplot(212)
+        ax.plot(op_trajectories[2, :] * 180 / np.pi, label="heading/grad")
+        ax.grid()
+        ax.legend()
+
+        trajectory = self.try_tracking(zst, op_controls, trajectory, obst=ob, ref_traj=ref_traj)
+        print("Done")
+        plt.show()
+
+    def plot_results_path_only(self, op_trajectories, ref_traj, obst):
+
+        self.cal_distance(op_trajectories[:2, :], len(ref_traj.T))
+        fig = plt.figure()
+        ax = plt.subplot(111)
+        ax.plot(op_trajectories[2, :] * 180 / np.pi, label="yaw/grad")
+        ax.plot(op_trajectories[3, :] * 180 / np.pi, label="steer/grad")
+        ax.grid()
+        ax.legend()
+
+        f = plt.figure()
+        i = 0
+        while True:
+            if self.show_animation:
+                plt.cla()
+                # for stopping simulation with the esc key.
+                plt.gcf().canvas.mpl_connect(
+                    'key_release_event',
+                    lambda event: [exit(0) if event.key == 'escape' else None])
+
+                if ref_traj is not None:
+                    plt.plot(ref_traj[0, 1:], ref_traj[1, 1:], "-", color="orange", label="reference")
+
+                plt.plot(op_trajectories[0, :], op_trajectories[1, :], "xg", label="MPC prediciton")
+
+                if obst is not None:
+                    for obi in obst:
+                        plt.plot(obi[:, 0], obi[:, 1], ".", color="black", label="obstacles")
+
+                plt.plot(op_trajectories[0, -1], op_trajectories[1, -1], "x", color="purple")
+                self.plot_robot(op_trajectories[0, i], op_trajectories[1, i], op_trajectories[2, i])
+
+                plt.legend()
+                plt.axis("equal")
+                plt.grid(True)
+                plt.pause(0.01)
+                i += 1
+
+                if i >= op_trajectories.shape[1]:
+                    print("end point arrived...")
+                    break
+
+        plt.show()
+
     def cal_distance(self, op_trajectories, iteration):
         diff_s = np.diff(np.array(op_trajectories), axis=1)
         sum_s = np.sum(np.hypot(diff_s[0, :], diff_s[1, :]))
         print("total number for iteration: ", iteration)
         print("total covered distance:{:.3f}m".format(sum_s))
 
+    def initialize_saved_data(self):
+        loadtraj = np.load("../data/saved_hybrid_a_star.npz")
+        ref_traj = loadtraj["saved_traj"]
+        loadmap = np.load("../data/saved_obmap.npz", allow_pickle=True)
+        ob1 = loadmap["pointmap"][0]
+        ob2 = loadmap["pointmap"][1]
+        ob3 = loadmap["pointmap"][2]
+        ob = [ob1, ob2, ob3]
 
-def initialize_saved_data():
-    loadtraj = np.load("../data/saved_hybrid_a_star.npz")
-    ref_traj = loadtraj["saved_traj"]
-    loadmap = np.load("../data/saved_obmap.npz", allow_pickle=True)
-    ob1 = loadmap["pointmap"][0]
-    ob2 = loadmap["pointmap"][1]
-    ob3 = loadmap["pointmap"][2]
-    ob = [ob1, ob2, ob3]
+        ob_constraint_mat = loadmap["constraint_mat"]
+        obst = []
+        obst.append(ob_constraint_mat[:4, :])
+        obst.append(ob_constraint_mat[4:8, :])
+        obst.append(ob_constraint_mat[8:12, :])
 
-    ob_constraint_mat = loadmap["constraint_mat"]
-    obst = []
-    obst.append(ob_constraint_mat[:4, :])
-    obst.append(ob_constraint_mat[4:8, :])
-    obst.append(ob_constraint_mat[8:12, :])
+        return ref_traj, ob, obst
 
-    return ref_traj, ob, obst
+    def get_car_shape(self):
+        Lev2 = (self.LB + self.LF) / 2
+        Wev2 = self.W / 2
+        car_outline = np.array(
+            [[-Lev2, Lev2, Lev2, -Lev2, -Lev2],
+             [Wev2, Wev2, -Wev2, -Wev2, Wev2]])
 
-
-def get_car_shape(ut):
-    # # anticlockwise
-    # car_outline = np.array([
-    #     [ut.LF, -ut.LB, -ut.LB, ut.LF, ut.LF],
-    #     [ut.W / 2, ut.W / 2, - ut.W / 2, -ut.W / 2, ut.W / 2]])
-    # # 90 grad
-    # car_outline = np.array([[1., -1, -1, 1, 1],
-    #                         [1, 1, -1, -1, 1]])
-    # car_outline[0, :] *= 2
-    # car_outline[1, :] *= 1
-    # clockwise
-    car_outline = np.array(
-        [[-ut.LB, ut.LF, ut.LF, ut.LB, -ut.LB],
-         [ut.W / 2, ut.W / 2, -ut.W / 2, -ut.W / 2, ut.W / 2]])
-
-    return cal_coeff_mat(car_outline.T)
+        return cal_coeff_mat(car_outline.T)
 
 
 if __name__ == '__main__':

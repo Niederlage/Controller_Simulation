@@ -26,6 +26,7 @@ class Path:
         self.x_list = x_list
         self.y_list = y_list
         self.yaw_list = yaw_list
+        # self.steer_list = steer_list
         self.direction_list = direction_list
         self.cost = cost
 

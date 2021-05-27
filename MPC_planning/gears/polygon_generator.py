@@ -23,6 +23,14 @@ def cal_coeff_mat(vertices):
             c_b = (vertices[i + 1, 0] - vertices[i, 0]) * -1 * clockwise  # x2 - x1
             c_a = (vertices[i + 1, 1] - vertices[i, 1]) * clockwise  # y2 - y1
             c_c = c_a * vertices[i + 1, 0] + c_b * vertices[i + 1, 1]
+            if c_b == 0.:
+                c_c /= abs(c_a)
+                c_a /= abs(c_a)
+                c_b = 0.
+            elif c_a == 0.:
+                c_c /= abs(c_b)
+                c_b /= abs(c_b)
+                c_a = 0.
             coeff.append(np.array([c_a, c_b, c_c]))
         return np.array(coeff)
     else:
@@ -69,11 +77,11 @@ def monte_carlo_sample_test(constraints):
 
 def get_polygon_map(use_sample_test=False):
     # clockwise
-    obst1 = np.array([[0, 8],
-                      [15, 8],
-                      [15, 0],
-                      [0, 0],
-                      [0, 8]])
+    obst1 = np.array([[-10, 6.],
+                      [-3.5, 6.],
+                      [-3.5, 0.],
+                      [-10., 0.],
+                      [-10., 6.]])
     # anticlockwise
     # obst1 = np.array([[15, 10],
     #                   [0, 10],
@@ -81,11 +89,11 @@ def get_polygon_map(use_sample_test=False):
     #                   [15, 0],
     #                   [15, 10]])
 
-    tf_1 = np.array([24, 0, 0])
+    tf_1 = np.array([13.5, 0, 0])
     obst2 = Euclidean_Transform(obst1, tf_1)
-    tf_2 = np.array([40 / 15, 0.6])[:, None]
+    tf_2 = np.array([31 / 10, 1.])[:, None]
     obst3 = np.copy(Scale_Transformation(obst1, tf_2))
-    obst3 = Euclidean_Transform(obst3, np.array([0, 16, 0]))
+    obst3 = Euclidean_Transform(obst3, np.array([21, 9, 0]))
     # obst3 = Scale_Transformation(obst3, np.array([0.6, 1.1]))
     obst_ = [obst1, obst2, obst3]
     samplelist = []
@@ -154,7 +162,7 @@ if __name__ == '__main__':
     car = np.array([[3., -1., -1., 3., 3.], [1., 1., -1., -1., 1.]])
 
     obmap, samples = get_polygon_map(use_sample_test=sample_test)
-    pointmap = get_point_map(obmap, 0.5)
+    pointmap = get_point_map(obmap, 0.2)
 
     if save_map:
         pointmap_ = np.array(pointmap, dtype=object)
@@ -180,8 +188,8 @@ if __name__ == '__main__':
             ax.plot(ob_[:, 0], ob_[:, 1], "b-")
         for ob_ in pointmap:
             ax.plot(ob_[:, 0], ob_[:, 1], "o", color="black")
-        ax.plot(30, 14, "gx", label="start")
-        ax.plot(20, 3, "rx", label="goal")
+        # ax.plot(30, 14, "gx", label="start")
+        # ax.plot(20, 3, "rx", label="goal")
     ax.grid()
     plt.axis("equal")
     plt.show()

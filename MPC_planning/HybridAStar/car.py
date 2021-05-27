@@ -7,7 +7,6 @@ author: Zheng Zh (@Zhengzh)
 """
 
 from math import sqrt, cos, sin, tan, pi
-from numba import njit, jit
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.spatial.transform import Rotation as Rot
@@ -17,9 +16,9 @@ class CarModel:
     def __init__(self):
         self.WB = 2.  # rear to front wheel [m]
         self.W = 2.  # width of car
-        self.LF = 4.  # distance from rear to vehicle front end
+        self.LF = 3.  # distance from rear to vehicle front end
         self.LB = 1.  # distance from rear to vehicle back end
-        self.MAX_STEER = 0.6  # [rad] maximum steering angle
+        self.MAX_STEER = 40 / 180 * np.pi  # [rad] maximum steering angle
         self.SAFE_FRONT = self.LF + 0.2
         self.SAFE_BACK = self.LB + 0.2
         self.SAFE_WIDTH = self.W + 0.2

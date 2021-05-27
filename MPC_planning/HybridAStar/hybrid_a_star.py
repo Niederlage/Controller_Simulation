@@ -5,8 +5,6 @@ Hybrid A* path planning
 author: Zheng Zh (@Zhengzh)
 
 """
-import numba
-from numba import jit
 import heapq
 import math
 import yaml
@@ -22,8 +20,6 @@ try:
 except Exception:
     raise
 
-this_size = numba.typed.Dict.empty(key_type=numba.types.float64, value_type=numba.types.float64)
-
 
 class HybridAStar:
     def __init__(self):
@@ -32,7 +28,7 @@ class HybridAStar:
         self.MOTION_RESOLUTION = 0.2  # [m/ grid] path interpolate resolution
         self.N_STEER = 7  # number of steer command
         self.ROBOT_RADIUS = 10.0  # robot radius
-        self.MAX_STEER = 2
+
         self.SB_COST = 5.0  # switch back penalty cost
         self.BACK_COST = 10  # backward penalty cost
         self.STEER_CHANGE_COST = 1.0  # steer angle change penalty cost
@@ -281,7 +277,7 @@ class HybridAStar:
     def get_final_path(self, closed, goal_node):
         reversed_x, reversed_y, reversed_yaw = \
             list(reversed(goal_node.x_list)), list(reversed(goal_node.y_list)), \
-            list(reversed(goal_node.yaw_list))
+            list(reversed(goal_node.yaw_list)) #, list(reversed(goal_node.steer_list))
         direction = list(reversed(goal_node.directions))
         nid = goal_node.parent_index
         final_cost = goal_node.cost
@@ -291,6 +287,7 @@ class HybridAStar:
             reversed_x.extend(list(reversed(n.x_list)))
             reversed_y.extend(list(reversed(n.y_list)))
             reversed_yaw.extend(list(reversed(n.yaw_list)))
+            # reversed_steer.extend(list(reversed(n.steer_list)))
             direction.extend(list(reversed(n.directions)))
 
             nid = n.parent_index
@@ -298,6 +295,7 @@ class HybridAStar:
         reversed_x = list(reversed(reversed_x))
         reversed_y = list(reversed(reversed_y))
         reversed_yaw = list(reversed(reversed_yaw))
+        # reversed_steer = list(reversed(reversed_steer))
         direction = list(reversed(direction))
 
         # adjust first direction
