@@ -4,7 +4,7 @@ import time
 from mpc_motion_plot import UTurnMPC
 
 
-class CasADi_MPC_OBCA:
+class CasADi_MPC_reference_line:
     def __init__(self):
         self.base = 2.0
         self.LF = 3.
@@ -30,6 +30,7 @@ class CasADi_MPC_OBCA:
         self.steer_rate_max = ca.pi * 40 / 180
         self.jerk_max = 3.
         self.dmin = 0.
+        self.allowed_dist = 1.
 
     def Array2SX(self, array):
         rows, cols = np.shape(array)
@@ -104,54 +105,6 @@ class CasADi_MPC_OBCA:
 
         return gx
 
-    def init_OBCA_constraints(self, x_, lambda_, mu_, shape, obst, gx):
-        # gT = self.Array2SX(shape[:, 2][:, None].T)
-        # GT = self.Array2SX(shape[:, :2].T)
-        G = ca.SX.zeros(4, 2)
-        G[0, 0] = 1
-        G[1, 0] = -1
-        G[2, 1] = 1
-        G[3, 1] = -1
-
-        g = ca.SX.zeros(4, 1)
-        g[0, 0] = 3
-        g[1, 0] = 1
-        g[2, 0] = 1
-        g[3, 0] = 1
-        GT = G.T
-        gT = g.T
-
-        l_ob = len(obst)
-        for i in range(self.horizon - 1):
-            mu_i = mu_[:, i]
-            yaw_i = x_[2, i + 1]
-            offset = ca.SX.zeros(2, 1)
-            offset[0, 0] = self.offset * ca.cos(yaw_i)
-            offset[1, 0] = self.offset * ca.sin(yaw_i)
-            t_i = x_[:2, i + 1]
-
-            rotT_i = ca.SX.zeros(2, 2)
-            rotT_i[0, 0] = ca.cos(yaw_i)
-            rotT_i[1, 1] = ca.cos(yaw_i)
-            rotT_i[1, 0] = -ca.sin(yaw_i)
-            rotT_i[0, 1] = ca.sin(yaw_i)
-
-            for j in range(l_ob):
-                Aj = self.Array2SX(obst[j][:, :2])
-                bj = self.Array2SX(obst[j][:, 2][:, None])
-                lambdaj = lambda_[(4 * j):(4 * (j + 1)), i]
-
-                constraint1 = rotT_i @ Aj.T @ lambdaj + GT @ mu_i
-                constraint2 = (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i + self.dmin
-                constraint3 = ca.sumsqr(Aj.T @ lambdaj)
-
-                gx[j, i] = constraint1[0, 0]
-                gx[j + l_ob, i] = constraint1[1, 0]
-                gx[j + 2 * l_ob, i] = constraint2
-                gx[j + 3 * l_ob, i] = constraint3
-
-        return gx
-
     def init_objects(self, x, dt, ref_path):
         sum_total_dist = 0
         sum_time = 0
@@ -181,49 +134,47 @@ class CasADi_MPC_OBCA:
 
         return obj
 
-    def init_bounds_OBCA(self, start, goal):
-        lbx = ca.DM.zeros(self.nx + (self.obst_num + 1) * 4, self.horizon)
-        ubx = ca.DM.zeros(self.nx + (self.obst_num + 1) * 4, self.horizon)
-        lbg = ca.DM.zeros(self.ng + 4 * self.obst_num, self.horizon - 1)
-        ubg = ca.DM.zeros(self.ng + 4 * self.obst_num, self.horizon - 1)
+    def init_bounds_reference_line(self, refpath):
+        lbx = ca.DM.zeros(self.nx, self.horizon)
+        ubx = ca.DM.zeros(self.nx, self.horizon)
+        lbg = ca.DM.zeros(self.ng, self.horizon - 1)
+        ubg = ca.DM.zeros(self.ng, self.horizon - 1)
 
         for i in range(self.horizon):
-            lbx[0, i] = -10.  # x
-            lbx[1, i] = 1.  # y
-            lbx[2, i] = -ca.pi  # th
+            lbx[0, i] = refpath[0, i] - ca.cos(ca.pi / 2 + refpath[2, i]) * self.allowed_dist  # x
+            lbx[1, i] = refpath[1, i] - ca.sin(ca.pi / 2 + refpath[2, i]) * self.allowed_dist  # y
+            lbx[2, i] = -ca.pi / 2  # th
             lbx[3, i] = -self.v_max  # v
             lbx[4, i] = -self.steer_max  # steer
             lbx[5, i] = -self.a_max  # a
             lbx[6, i] = -self.steer_rate_max  # steer_rate
             lbx[7, i] = -self.jerk_max  # jerk
-            lbx[8:, i] = 1e-8  # lambda, mu
 
-            ubx[0, i] = 10.  # x
-            ubx[1, i] = 10.  # 1.1y
+            ubx[0, i] = refpath[0, i] + ca.cos(ca.pi / 2 + refpath[2, i]) * self.allowed_dist  # x
+            ubx[1, i] = refpath[1, i] + ca.sin(ca.pi / 2 + refpath[2, i]) * self.allowed_dist  # y
             ubx[2, i] = ca.pi  # th
             ubx[3, i] = self.v_max  # v
             ubx[4, i] = self.steer_max  # steer
             ubx[5, i] = self.a_max  # a
             ubx[6, i] = self.steer_rate_max  # steer_rate
             ubx[7, i] = self.jerk_max  # jerk
-            ubx[8:, i] = 1  # lambda, mu
 
         # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i
         lbg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 1e-5
-        ubg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 1e-5 #1e-5
+        ubg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 1  # 1e-5
 
         # constraint3  norm_2(Aj.T @ lambdaj)
         lbg[6 + 3 * self.obst_num:6 + 4 * self.obst_num, :] = 1.
         ubg[6 + 3 * self.obst_num:6 + 4 * self.obst_num, :] = 1.
 
-        lbx[0, 0] = start[0]
-        lbx[1, 0] = start[1]
-        lbx[2, 0] = start[2]
+        lbx[0, 0] = refpath[0, 0]
+        lbx[1, 0] = refpath[1, 0]
+        lbx[2, 0] = refpath[2, 0]
         lbx[3:, 0] = 0.
 
-        ubx[0, 0] = start[0]
-        ubx[1, 0] = start[1]
-        ubx[2, 0] = start[2]
+        ubx[0, 0] = refpath[0, 0]
+        ubx[1, 0] = refpath[1, 0]
+        ubx[2, 0] = refpath[2, 0]
         ubx[3:, 0] = 0.
 
         lbx[0, -1] = goal[0]
@@ -358,7 +309,6 @@ if __name__ == '__main__':
     start_time = time.time()
 
     ut = UTurnMPC()
-    ut.reserve_footprint = True
     # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
     cmpc = CasADi_MPC_OBCA()
     ref_traj, ob, obst = ut.initialize_saved_data()

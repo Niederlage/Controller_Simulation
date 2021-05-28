@@ -17,6 +17,8 @@ class UTurnMPC():
         self.predicted_trajectory = None
         self.optimal_dt = None
         self.show_animation = True
+        self.reserve_footprint = False
+        self.plot_arrows = False
 
     def motion_model(self, zst, u_in, dt):
         vr = u_in[0]
@@ -37,10 +39,7 @@ class UTurnMPC():
         plt.plot(x, y)
 
     def plot_robot(self, x, y, yaw):  # pragma: no cover
-        # # 90 grad
-        # outline = np.array([[self.W / 2, -self.W / 2, - self.W / 2, self.W / 2, self.W / 2],
-        #                     [self.LF, self.LF, -self.LB, -self.LB, self.LF]])
-        # old
+
         outline = np.array([
             [self.LF, self.LF, -self.LB, -self.LB, self.LF],
             [self.W / 2, -self.W / 2, - self.W / 2, self.W / 2, self.W / 2]])
@@ -51,43 +50,49 @@ class UTurnMPC():
         outline[0, :] += x
         outline[1, :] += y
         plt.plot(np.array(outline[0, :]).flatten(),
-                 np.array(outline[1, :]).flatten(), "-k")
-
-        arrow_x, arrow_y, arrow_yaw = x, y, yaw
-        self.plot_arrow(arrow_x, arrow_y, arrow_yaw)
+                 np.array(outline[1, :]).flatten(), "-", color='cadetblue')
+        if self.plot_arrows:
+            arrow_x, arrow_y, arrow_yaw = x, y, yaw
+            self.plot_arrow(arrow_x, arrow_y, arrow_yaw)
 
     def try_tracking(self, zst, u_op, trajectory, obst=None, ref_traj=None):
         k = 0
         f = plt.figure()
+        ax = plt.subplot()
         while True:
             zst[:3] = self.motion_model(zst[:3], u_op[:, k], self.dt)  # simulate robot
             trajectory = np.vstack((trajectory, zst))  # store state history
 
             if self.show_animation:
-                plt.cla()
                 # for stopping simulation with the esc key.
                 plt.gcf().canvas.mpl_connect(
                     'key_release_event',
                     lambda event: [exit(0) if event.key == 'escape' else None])
 
+                if not self.reserve_footprint:
+                    plt.cla()
+                    self.plot_arrows = True
+
                 if ref_traj is not None:
                     plt.plot(ref_traj[0, 1:], ref_traj[1, 1:], "-", color="orange", label="warm start reference")
-
-                plt.plot(zst[0], zst[1], "xr")
-                plt.plot(self.predicted_trajectory[0, :], self.predicted_trajectory[1, :], "xg", label="MPC prediciton")
-                plt.plot(trajectory[:, 0], trajectory[:, 1], "-r")
                 if obst is not None:
                     for obi in obst:
-                        plt.plot(obi[:, 0], obi[:, 1], ".", color="black", label="obstacles")
+                        plt.plot(obi[:, 0], obi[:, 1], color="black", label="obstacles")
 
-                plt.plot(ref_traj[0, -1], ref_traj[1, -1], "xb")
-                plt.plot(self.predicted_trajectory[0, -1], self.predicted_trajectory[1, -1], "x", color="purple")
+                ax.plot(self.predicted_trajectory[0, :], self.predicted_trajectory[1, :], "xg", label="MPC prediciton")
+                ax.plot(trajectory[:, 0], trajectory[:, 1], "-r")
+
+                ax.plot(ref_traj[0, -1], ref_traj[1, -1], "xb")
+                ax.plot(self.predicted_trajectory[0, -1], self.predicted_trajectory[1, -1], "x", color="purple")
                 self.plot_robot(zst[0], zst[1], zst[2])
 
-                plt.legend()
+                if not self.reserve_footprint:
+                    handles, labels = ax.get_legend_handles_labels()
+                    ax.legend(handles, labels, fontsize=10, loc="upper left")
+
                 plt.axis("equal")
                 plt.grid(True)
-                plt.pause(0.1)
+                plt.pause(0.01)
                 k += 1
 
             if k >= u_op.shape[1]:
@@ -153,7 +158,7 @@ class UTurnMPC():
 
                 if obst is not None:
                     for obi in obst:
-                        plt.plot(obi[:, 0], obi[:, 1], ".", color="black", label="obstacles")
+                        plt.plot(obi[:, 0], obi[:, 1], "_", color="black", label="obstacles")
 
                 plt.plot(op_trajectories[0, -1], op_trajectories[1, -1], "x", color="purple")
                 self.plot_robot(op_trajectories[0, i], op_trajectories[1, i], op_trajectories[2, i])

@@ -87,19 +87,15 @@ class CasADi_MPC_WarmUp:
         ubg = ca.DM(self.ng, self.horizon - 1)
 
         for i in range(self.horizon - 1):
-            lbx[:self.obst_num, i] = -1e-1  # dist
+            lbx[0:self.obst_num, i] = -1e-1  # dist
             lbx[self.obst_num:, i] = 0.  # lambda, mu
 
-            ubx[:self.obst_num, i] = -1e-10  # dist
-            ubx[self.obst_num:, i] = -1e-2  # lambda, mu
+            ubx[0:self.obst_num, i] = 0.  # dist
+            ubx[self.obst_num:, i] = ca.inf  # lambda, mu
 
             # # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i + d == 0
-            lbg[2 * self.obst_num:3 * self.obst_num, i] = 1e-10
-            ubg[2 * self.obst_num:3 * self.obst_num, i] = 1e-6
-
-            # # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i + d == 0
-            lbg[2 * self.obst_num:3 * self.obst_num, i] = 1e-10
-            ubg[2 * self.obst_num:3 * self.obst_num, i] = 1e-6
+            lbg[2 * self.obst_num:3 * self.obst_num, i] = 0.
+            ubg[2 * self.obst_num:3 * self.obst_num, i] = 0.
 
             # constraint3  norm_2(Aj.T @ lambdaj) <= 1
             lbg[3 * self.obst_num:, i] = 1.
@@ -151,19 +147,16 @@ class CasADi_MPC_WarmUp:
         X, G = self.organize_variables(d_, lambda_, mu_, gx)
         X0, XL, XU, GL, GU = self.organize_bounds(v0)
 
+        l_X = X.size()[0]
+        H = ca.DM(l_X, l_X)
+        H[:self.obst_num * self.horizon, :self.obst_num * self.horizon] = ca.DM_eye(self.obst_num * self.horizon)
+
         # initialize objectives
         F = self.init_objects_warmup(d_)
 
         qp = {"x": X, "f": F, "g": G}
-        opts_setting = {"expand": True,
-                        "ipopt.hessian_approximation": "limited-memory",
-                        'ipopt.max_iter': 200,
-                        'ipopt.print_level': 0,
-                        'print_time': 0,
-                        'ipopt.acceptable_tol': 1e-8,
-                        'ipopt.acceptable_obj_change_tol': 1e-6}
-
-        Sol = ca.nlpsol('S', 'ipopt', qp, opts_setting)
+        opts_setting = {"error_on_fail": False}
+        Sol = ca.qpsol('S', 'qpoases', qp, opts_setting)
 
         result = Sol(x0=X0, lbx=XL, ubx=XU, lbg=GL, ubg=GU)
         self.d_opt = result["x"]

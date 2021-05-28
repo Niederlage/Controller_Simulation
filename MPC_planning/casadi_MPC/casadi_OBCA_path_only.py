@@ -16,9 +16,8 @@ class CasADi_MPC_OBCA_PathOnly:
         self.x_opt = None
         self.obst_num = 0
         self.horizon = 0
-        self.alpha = 1.2
 
-        self.wg = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1]
+        self.wg = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 1e1, 1e2, 1e3]
         self.dmin = 0.
 
     def Array2SX(self, array):
@@ -34,17 +33,37 @@ class CasADi_MPC_OBCA_PathOnly:
         for i in range(self.horizon - 1):
             x_ = x[0, i]
             y_ = x[1, i]
-            th_ = x[2, i]
+            yaw_ = x[2, i]
             steer_ = x[3, i]
 
-            dx = x_ + d_res * ca.cos(th_)
-            dy = y_ + d_res * ca.sin(th_)
-            dth = th_ + d_res / self.base * ca.tan(steer_)
+            dx = d_res * ca.cos(yaw_)
+            dy = d_res * ca.sin(yaw_)
+            dyaw = d_res / self.base * ca.tan(steer_)
 
-            gx[0, i] = dx - x[0, i + 1]
-            gx[1, i] = dy - x[1, i + 1]
-            gx[2, i] = dth - x[2, i + 1]
-            # gx[3, i] =  ca.cos(th_) - ca.sin(th_)
+            # k1_dx = d_res * ca.cos(yaw_)
+            # k1_dy = d_res * ca.sin(yaw_)
+            # k1_dyaw = d_res / self.base * ca.tan(steer_)
+            #
+            # k2_dx = d_res * ca.cos(yaw_ + 0.5 * k1_dyaw)
+            # k2_dy = d_res * ca.sin(yaw_ + 0.5 * k1_dyaw)
+            # k2_dyaw = d_res / self.base * ca.tan(steer_)
+            #
+            # k3_dx = d_res * ca.cos(yaw_ + 0.5 * k2_dyaw)
+            # k3_dy = d_res * ca.sin(yaw_ + 0.5 * k2_dyaw)
+            # k3_dyaw = d_res / self.base * ca.tan(steer_)
+            #
+            # k4_dx = d_res * ca.cos(yaw_ + 0.5 * k3_dyaw)
+            # k4_dy = d_res * ca.sin(yaw_ + 0.5 * k3_dyaw)
+            # k4_dyaw = d_res / self.base * ca.tan(steer_)
+            #
+            # dx = (k1_dx + 2 * k2_dx + 2 * k3_dx + k4_dx) / 6
+            # dy = (k1_dy + 2 * k2_dy + 2 * k3_dy + k4_dy) / 6
+            # dyaw = (k1_dyaw + 2 * k2_dyaw + 2 * k3_dyaw + k4_dyaw) / 6
+
+            gx[0, i] = x_ + dx - x[0, i + 1]
+            gx[1, i] = y_ + dy - x[1, i + 1]
+            gx[2, i] = yaw_ + dyaw - x[2, i + 1]
+            # gx[3, i] = dy * ca.cos(yaw_) - dx * ca.sin(yaw_)
 
         return gx
 
@@ -69,9 +88,9 @@ class CasADi_MPC_OBCA_PathOnly:
         for i in range(self.horizon - 1):
             mu_i = mu_[:, i]
             yaw_i = x_[2, i]
-            # offset = ca.SX.zeros(2, 1)
-            # offset[0, 0] = 1 * ca.cos(yaw_i)
-            # offset[1, 0] = 1 * ca.sin(yaw_i)
+            offset = ca.SX.zeros(2, 1)
+            offset[0, 0] = 1 * ca.cos(yaw_i)
+            offset[1, 0] = 1 * ca.sin(yaw_i)
             t_i = x_[:2, i]
             rotT_i = ca.SX.zeros(2, 2)
             rotT_i[0, 0] = ca.cos(yaw_i)
@@ -111,9 +130,9 @@ class CasADi_MPC_OBCA_PathOnly:
                 sum_yaw_rate += ca.power(x[2, i] - x[2, i - 1], 2)
                 sum_steer_rate += ca.power(x[3, i] - x[3, i - 1], 2)
 
-        obj = self.wg[3] * sum_total_dist + self.wg[4] * sum_yaw_rate \
-              + self.wg[4] * sum_steer + self.wg[4] * sum_steer_rate \
-              + self.wg[4] * sum_dist_to_ref
+        obj = self.wg[2] * sum_total_dist + self.wg[1] * sum_yaw_rate \
+              + self.wg[6] * sum_steer + self.wg[6] * sum_steer_rate \
+              + self.wg[2] * sum_dist_to_ref
 
         return obj
 
@@ -125,7 +144,7 @@ class CasADi_MPC_OBCA_PathOnly:
 
         for i in range(self.horizon - 1):
             lbx[0, i] = -10.  # x
-            lbx[1, i] = 0.  # y
+            lbx[1, i] = 2.  # y
             lbx[2, i] = -ca.pi  # th
             lbx[3, i] = -self.steer_max  # steer
             lbx[4:, i] = 0.  # lambda, mu
@@ -140,8 +159,8 @@ class CasADi_MPC_OBCA_PathOnly:
             # ubg[6:6 + 2 * self.obst_num, i] = 0.
 
             # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i
-            lbg[self.ng + 2 * self.obst_num:self.ng + 3 * self.obst_num, i] = 0.
-            ubg[self.ng + 2 * self.obst_num:self.ng + 3 * self.obst_num, i] = ca.inf
+            lbg[self.ng + 2 * self.obst_num:self.ng + 3 * self.obst_num, i] = 1e-5
+            ubg[self.ng + 2 * self.obst_num:self.ng + 3 * self.obst_num, i] = 1e-5
 
             # constraint3  norm_2(Aj.T @ lambdaj) - 1
             lbg[self.ng + 3 * self.obst_num:self.ng + 4 * self.obst_num, i] = 1.
@@ -151,6 +170,7 @@ class CasADi_MPC_OBCA_PathOnly:
         lbx[1, 0] = start[1]
         lbx[2, 0] = start[2]
         lbx[3:, 0] = 0.
+
 
         ubx[0, 0] = start[0]
         ubx[1, 0] = start[1]
@@ -185,7 +205,8 @@ class CasADi_MPC_OBCA_PathOnly:
             if i > 1:
                 ds = np.linalg.norm(reference_path[:2, i] - reference_path[:2, i - 1])
                 dyaw = reference_path[2, i] - reference_path[2, i - 1]
-                x0[3, i] = ca.atan2(dyaw * self.base / ds, 1)
+                steer = ca.atan2(dyaw * self.base / ds, 1)
+                x0[3, i] = steer
 
         return x0
 
@@ -221,7 +242,7 @@ class CasADi_MPC_OBCA_PathOnly:
         nlp = {"x": X, "f": F, "g": G}
         opts_setting = {"expand": True,
                         "ipopt.hessian_approximation": "limited-memory",
-                        'ipopt.max_iter': 100,
+                        'ipopt.max_iter': 300,
                         'ipopt.print_level': 3,
                         'print_time': 1,
                         'ipopt.acceptable_tol': 1e-8,
