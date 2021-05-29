@@ -189,30 +189,34 @@ class CasADi_MPC_OBCA:
 
         for i in range(self.horizon):
             lbx[0, i] = -10.  # x
-            lbx[1, i] = 1.  # y
-            lbx[2, i] = -ca.pi  # th
-            lbx[3, i] = -self.v_max  # v
-            lbx[4, i] = -self.steer_max  # steer
-            lbx[5, i] = -self.a_max  # a
-            lbx[6, i] = -self.steer_rate_max  # steer_rate
-            lbx[7, i] = -self.jerk_max  # jerk
-            lbx[8:, i] = 1e-8  # lambda, mu
-
             ubx[0, i] = 10.  # x
+            lbx[1, i] = 1.  # y
             ubx[1, i] = 10.  # 1.1y
+            lbx[2, i] = -ca.pi  # th
             ubx[2, i] = ca.pi  # th
+            lbx[3, i] = -self.v_max  # v
             ubx[3, i] = self.v_max  # v
+            lbx[4, i] = -self.steer_max  # steer
             ubx[4, i] = self.steer_max  # steer
+            lbx[5, i] = -self.a_max  # a
             ubx[5, i] = self.a_max  # a
+            lbx[6, i] = -self.steer_rate_max  # steer_rate
             ubx[6, i] = self.steer_rate_max  # steer_rate
+            lbx[7, i] = -self.jerk_max  # jerk
             ubx[7, i] = self.jerk_max  # jerk
+
+            lbx[8:, i] = 1e-8  # lambda, mu
             ubx[8:, i] = 1  # lambda, mu
+
+        # constraint1  rotT_i @ Aj.T @ lambdaj + GT @ mu_i == 0
+        lbg[6:6 + 2 * self.obst_num, :] = 0.
+        ubg[6:6 + 2 * self.obst_num, :] = 1e-3  # 1e-5
 
         # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i
         lbg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 1e-5
-        ubg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 1e-5 #1e-5
+        ubg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 1e-5  # 1e-5
 
-        # constraint3  norm_2(Aj.T @ lambdaj)
+        # constraint3  norm_2(Aj.T @ lambdaj) == 1
         lbg[6 + 3 * self.obst_num:6 + 4 * self.obst_num, :] = 1.
         ubg[6 + 3 * self.obst_num:6 + 4 * self.obst_num, :] = 1.
 

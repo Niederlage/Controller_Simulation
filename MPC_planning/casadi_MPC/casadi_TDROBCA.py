@@ -156,7 +156,6 @@ class CasADi_MPC_TDROBCA:
 
     def init_objects(self, x_, d_, ref_path):
         sum_total_dist = 0
-        sum_time = 0
         sum_vel = 0
         sum_steer = 0
         sum_a = 0
@@ -166,20 +165,19 @@ class CasADi_MPC_TDROBCA:
         sum_mindist = 0
 
         for i in range(self.horizon):
-            sum_vel += ca.power(x_[3, i], 2)
-            sum_a += ca.power(x_[5, i], 2)
-            sum_jerk += ca.power(x_[6, i], 2)
-            sum_steer_rate += ca.power(x_[6, i], 2)
+            sum_vel += ca.power(x_[3, i] / self.dt0, 2)
+            sum_a += ca.power(x_[5, i] / (self.dt0 ** 2), 2)
+            sum_jerk += ca.power(x_[6, i] / (self.dt0 ** 3), 2)
+            sum_steer_rate += ca.power(x_[6, i] / (self.dt0), 2)
             sum_dist_to_ref += ca.sumsqr(x_[:3, i] - ref_path[:3, i])
             sum_mindist += ca.sumsqr(d_[:, i])
             if i > 1:
                 sum_total_dist += ca.sumsqr(x_[:2, i] - x_[:2, i - 1])
                 sum_steer += ca.power(x_[4, i] - x_[4, i - 1], 2)
 
-        obj = self.wg[6] * sum_total_dist + self.wg[9] * sum_time \
-              + self.wg[3] * sum_vel + self.wg[6] * sum_steer \
+        obj = self.wg[6] * sum_total_dist + self.wg[3] * sum_vel + self.wg[6] * sum_steer \
               + self.wg[3] * sum_a + self.wg[5] * sum_steer_rate \
-              + self.wg[3] * sum_dist_to_ref + self.wg[4] * sum_jerk + 1 * self.wg[4] * sum_mindist
+              + self.wg[3] * sum_dist_to_ref + self.wg[4] * sum_jerk + 5e14 * self.wg[9] * sum_mindist
 
         return obj
 
@@ -191,30 +189,30 @@ class CasADi_MPC_TDROBCA:
 
         for i in range(self.horizon):
             lbx[0, i] = -10.  # x
-            lbx[1, i] = 1.  # y
-            lbx[2, i] = -ca.pi  # th
-            lbx[3, i] = -self.v_max  # v
-            lbx[4, i] = -self.steer_max  # steer
-            lbx[5, i] = -self.a_max  # a
-            lbx[6, i] = -self.steer_rate_max  # steer_rate
-            lbx[7, i] = -self.jerk_max  # jerk
-            lbx[8:-self.obst_num, i] = 1e-10  # lambda, mu
-            lbx[-self.obst_num:, i] = -1e-1  # dmin
-
             ubx[0, i] = 10.  # x
+            lbx[1, i] = 1.  # y
             ubx[1, i] = 10.  # 1.1y
+            lbx[2, i] = -ca.pi  # th
             ubx[2, i] = ca.pi  # th
+            lbx[3, i] = -self.v_max  # v
             ubx[3, i] = self.v_max  # v
+            lbx[4, i] = -self.steer_max  # steer
             ubx[4, i] = self.steer_max  # steer
+            lbx[5, i] = -self.a_max  # a
             ubx[5, i] = self.a_max  # a
+            lbx[6, i] = -self.steer_rate_max  # steer_rate
             ubx[6, i] = self.steer_rate_max  # steer_rate
+            lbx[7, i] = -self.jerk_max  # jerk
             ubx[7, i] = self.jerk_max  # jerk
-            ubx[8:-self.obst_num, i] = 1e-3  # lambda, mu
-            ubx[-self.obst_num:, i] = -5e-6  # dmin
 
-        # constraint1  constraint1 = rotT_i @ Aj.T @ lambdaj + GT @ mu_i == 0
-        lbg[6:6 + 2 * self.obst_num, :] = 1e-7
-        ubg[6:6 + 2 * self.obst_num, :] = 1e-5
+            lbx[8:-self.obst_num, i] = 1e-8  # lambda, mu
+            ubx[8:-self.obst_num, i] = 1.  # lambda, mu
+            lbx[-self.obst_num:, i] = -1e-1  # dmin
+            ubx[-self.obst_num:, i] = -1e-3  # -4e-5  # dmin
+
+        # constraint1 rotT_i @ Aj.T @ lambdaj + GT @ mu_i == 0
+        lbg[6:6 + 2 * self.obst_num, :] = 0.
+        ubg[6:6 + 2 * self.obst_num, :] = 1e-3
 
         # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i + dmin == 0
         lbg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 0.
@@ -258,7 +256,7 @@ class CasADi_MPC_TDROBCA:
         x0 = ca.DM(self.nx, self.horizon)
         diff_s = np.diff(reference_path[:2, :], axis=1)
         sum_s = np.sum(np.hypot(diff_s[0], diff_s[1]))
-        self.dt0 = 1.3 * (sum_s / self.v_max + self.v_max / self.a_max) / self.horizon
+        self.dt0 = 1.3* (sum_s / self.v_max + self.v_max / self.a_max) / self.horizon
         last_v = 0.
         last_a = 0.
         last_steer = 0.
@@ -321,9 +319,9 @@ class CasADi_MPC_TDROBCA:
         F = self.init_objects(x, d_, x0_)
 
         nlp = {"x": X, "f": F, "g": G}
-        opts_setting = {"expand": True,
+        opts_setting = {"expand": False,
                         "ipopt.hessian_approximation": "exact",
-                        'ipopt.max_iter': 200,
+                        'ipopt.max_iter': 100,
                         'ipopt.print_level': 3,
                         'print_time': 1,
                         'ipopt.acceptable_tol': 1e-8,

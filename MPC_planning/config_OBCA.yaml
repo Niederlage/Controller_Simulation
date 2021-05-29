@@ -2,15 +2,15 @@ PredictionNum: 40  # forward predict steps
 StateNum: 7   # state numbers / here: 1: x, 2: y, 3: psi, 4: v, 5: psi 6: ctex, 7: ctey, 8: epsi
 ControlNum: 2  # actuator numbers /here: 1: steering angle, 2: throttle
 start:
-  - 7.5  # x end
+  - -7.5  # x end
   - 7.5 # y end
   - 0. # theta end
   - 0.  # v end
   - 0.  # psi end
 goal: # goal with angle
-  - -0.8  # x end
+  - 0.  # x end
   - 1.5 # y end
-  - 0. # theta end
+  - 90. # theta end
   - 0.  # v end
   - 0.  # psi end
   - 0. # acc end
