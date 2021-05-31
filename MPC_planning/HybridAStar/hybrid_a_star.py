@@ -25,9 +25,9 @@ class HybridAStar:
     def __init__(self):
         self.XY_GRID_RESOLUTION = 1  # [ m / grid]
         self.YAW_GRID_RESOLUTION = np.deg2rad(5.0)  # [rad/ grid]
-        self.MOTION_RESOLUTION = 0.2  # [m/ grid] path interpolate resolution
+        self.MOTION_RESOLUTION = 0.1  # [m/ grid] path interpolate resolution
         self.N_STEER = 7  # number of steer command
-        self.ROBOT_RADIUS = 10.0  # robot radius
+        self.ROBOT_RADIUS = 1.0  # robot radius
 
         self.SB_COST = 5.0  # switch back penalty cost
         self.BACK_COST = 10  # backward penalty cost
@@ -277,7 +277,7 @@ class HybridAStar:
     def get_final_path(self, closed, goal_node):
         reversed_x, reversed_y, reversed_yaw = \
             list(reversed(goal_node.x_list)), list(reversed(goal_node.y_list)), \
-            list(reversed(goal_node.yaw_list)) #, list(reversed(goal_node.steer_list))
+            list(reversed(goal_node.yaw_list))  # , list(reversed(goal_node.steer_list))
         direction = list(reversed(goal_node.directions))
         nid = goal_node.parent_index
         final_cost = goal_node.cost
@@ -365,15 +365,21 @@ def generate_obmap(loadmap=False):
         return np.array([ox, oy])
 
 
-def init_startpoints(loadmap=True):
+def init_startpoints(planner, loadmap=True,large=True):
     print("Start Hybrid A* planning")
     if loadmap:
-        with open("../config_OBCA.yaml", 'r', encoding='utf-8') as f:
+        if large:
+            address = "../config_OBCA_large.yaml"
+        else:
+            address = "../config_OBCA.yaml"
+        with open(address, 'r', encoding='utf-8') as f:
             param = yaml.load(f)
         sx = param["start"]
         ex = param["goal"]
         start = [sx[0], sx[1], np.deg2rad(sx[2])]
         goal = [ex[0], ex[1], np.deg2rad(ex[2])]
+        if large:
+            planner.car.set_parameters(param)
     else:
         # Set Initial parameters
         start = [10.0, 10.0, np.deg2rad(90.0)]
@@ -399,7 +405,7 @@ def save_planned_path(path, planner, obst):
 
 def main():
     planner = HybridAStar()
-    start, goal, obst = init_startpoints()
+    start, goal, obst = init_startpoints(planner)
 
     if planner.show_animation:
         plt.plot(obst[0], obst[1], ".k")

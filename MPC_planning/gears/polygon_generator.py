@@ -75,25 +75,32 @@ def monte_carlo_sample_test(constraints):
     return np.array(rdn_list)
 
 
-def get_polygon_map(use_sample_test=False):
-    # clockwise
-    obst1 = np.array([[-10, 6.],
-                      [-3.5, 6.],
-                      [-3.5, 0.],
-                      [-10., 0.],
-                      [-10., 6.]])
-    # anticlockwise
-    # obst1 = np.array([[15, 10],
-    #                   [0, 10],
-    #                   [0, 0],
-    #                   [15, 0],
-    #                   [15, 10]])
+def get_polygon_map(use_sample_test=False,large=True):
+    if large:
+        obst1 = np.array([[-10, 6.],
+                          [-3.5, 6.],
+                          [-3.5, 0.],
+                          [-10., 0.],
+                          [-10., 6.]])
 
-    tf_1 = np.array([13.5, 0, 0])
-    obst2 = Euclidean_Transform(obst1, tf_1)
-    tf_2 = np.array([31 / 10, 1.])[:, None]
-    obst3 = np.copy(Scale_Transformation(obst1, tf_2))
-    obst3 = Euclidean_Transform(obst3, np.array([21, 9, 0]))
+        tf_1 = np.array([13.5, 0, 0])
+        obst2 = Euclidean_Transform(obst1, tf_1)
+        tf_2 = np.array([31 / 10, 1.])[:, None]
+        obst3 = np.copy(Scale_Transformation(obst1, tf_2))
+        obst3 = Euclidean_Transform(obst3, np.array([21, 9, 0]))
+
+    else:
+        obst1 = np.array([[0, 1.5],
+                          [2.5, 1.5],
+                          [2.5, 0.],
+                          [0., 0.],
+                          [0., 1.5]])
+        tf_1 = np.array([4, 0, 0])
+
+        obst2 = Euclidean_Transform(obst1, tf_1)
+        tf_2 = np.array([6.5 / 2.5, 1.])[:, None]
+        obst3 = np.copy(Scale_Transformation(obst1, tf_2))
+        obst3 = Euclidean_Transform(obst3, np.array([0, 3, 0]))
     # obst3 = Scale_Transformation(obst3, np.array([0.6, 1.1]))
     obst_ = [obst1, obst2, obst3]
     samplelist = []
@@ -159,17 +166,17 @@ if __name__ == '__main__':
     else:
         sample_test = True
 
-    car = np.array([[3., -1., -1., 3., 3.], [1., 1., -1., -1., 1.]])
+    car = np.array([[0.4, -0.4, -0.4, 0.4, 0.4], [0.3, 0.3, -0.3, -0.3, 0.3]])
 
     obmap, samples = get_polygon_map(use_sample_test=sample_test)
-    pointmap = get_point_map(obmap, 0.2)
+    pointmap = get_point_map(obmap, 0.1)
 
     if save_map:
         pointmap_ = np.array(pointmap, dtype=object)
         print("total points num:", len(pointmap_))
         np.savez("../data/saved_obmap.npz", polygons=obmap, constraint_mat=samples, pointmap=pointmap_)
-        print(1)
-    fig = plt.figure()
+        print("map saved")
+    fig = plt.figure(figsize=(1.5, 1.5), dpi=100)
     ax = fig.add_subplot(111)
     ax.cla()
 
@@ -182,14 +189,17 @@ if __name__ == '__main__':
     if plot_obmap:
         shape = cal_coeff_mat(car.T)
         car_sample = monte_carlo_sample_test(shape)
-        ax.plot(car[0], car[1], "-", color="purple")
+        # ax.plot(car[0], car[1], "-", color="purple")
         # ax.plot(car_sample[:, 0], car_sample[:, 1], "o", color="orange")
         for ob_ in obmap:
             ax.plot(ob_[:, 0], ob_[:, 1], "b-")
         for ob_ in pointmap:
-            ax.plot(ob_[:, 0], ob_[:, 1], "o", color="black")
+            ax.plot(ob_[:, 0], ob_[:, 1], color="black")
         # ax.plot(30, 14, "gx", label="start")
         # ax.plot(20, 3, "rx", label="goal")
-    ax.grid()
+    # ax.grid()
+    plt.subplots_adjust(top=1, bottom=0, left=0, right=1, hspace=0, wspace=0)
     plt.axis("equal")
+    plt.axis('off')
+    plt.savefig("fig1.png")
     plt.show()

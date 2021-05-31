@@ -2,13 +2,13 @@ import casadi as ca
 import numpy as np
 import time
 from mpc_motion_plot import UTurnMPC
-
+import yaml
 
 class CasADi_MPC_OBCA:
     def __init__(self):
-        self.base = 2.0
-        self.LF = 3.
-        self.LB = 1.
+        self.base = 0.4
+        self.LF = 0.6
+        self.LB = 0.2
         self.offset = (self.LF - self.LB) / 2
 
         self.nx = 8
@@ -30,6 +30,11 @@ class CasADi_MPC_OBCA:
         self.steer_rate_max = ca.pi * 40 / 180
         self.jerk_max = 3.
         self.dmin = 0.
+
+    def set_parameters(self, param):
+        self.base = param["base"]
+        self.LF = param["LF"]  # distance from rear to vehicle front end
+        self.LB = param["LB"]  # distance from rear to vehicle back end
 
     def Array2SX(self, array):
         rows, cols = np.shape(array)
@@ -243,7 +248,7 @@ class CasADi_MPC_OBCA:
         lbx_ = ca.reshape(lbx, -1, 1)
         ubx_ = ca.reshape(ubx, -1, 1)
         lbx_ = ca.vertcat(0.01, lbx_)
-        ubx_ = ca.vertcat(0.5, ubx_)
+        ubx_ = ca.vertcat(0.1, ubx_)
 
         lbg_ = ca.reshape(lbg, -1, 1)
         ubg_ = ca.reshape(ubg, -1, 1)
@@ -360,11 +365,21 @@ class CasADi_MPC_OBCA:
 
 if __name__ == '__main__':
     start_time = time.time()
+    large = True
+    if large:
+        address = "../config_OBCA_large.yaml"
+    else:
+        address = "../config_OBCA.yaml"
+    with open(address, 'r', encoding='utf-8') as f:
+        param = yaml.load(f)
 
     ut = UTurnMPC()
+    ut.set_parameters(param)
+
     ut.reserve_footprint = True
     # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
     cmpc = CasADi_MPC_OBCA()
+    cmpc.set_parameters(param)
     ref_traj, ob, obst = ut.initialize_saved_data()
     shape = ut.get_car_shape()
 

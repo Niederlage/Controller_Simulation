@@ -20,6 +20,9 @@ class CasADi_MPC_OBCA_PathOnly:
         self.wg = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 1e1, 1e2, 1e3]
         self.dmin = 0.
 
+    def set_parameters(self, param):
+        self.base = param["base"]
+
     def Array2SX(self, array):
         rows, cols = np.shape(array)
         sx = ca.SX.zeros(rows * cols, 1)

@@ -2,17 +2,18 @@ import casadi as ca
 import numpy as np
 import time
 from mpc_motion_plot import UTurnMPC
+import yaml
 
 
 class CasADi_MPC_reference_line:
     def __init__(self):
-        self.base = 2.0
+        self.base = 2.
         self.LF = 3.
         self.LB = 1.
         self.offset = (self.LF - self.LB) / 2
 
-        self.nx = 8
-        self.ng = 6
+        self.nx = 8 + 1
+        self.ng = 6 + 1
         self.obst_num = 0
         self.horizon = 0
         self.dt0 = 0.01
@@ -29,10 +30,15 @@ class CasADi_MPC_reference_line:
         self.a_max = 3.
         self.steer_rate_max = ca.pi * 40 / 180
         self.jerk_max = 3.
-        self.lateral_error_max = 1.
+        self.lateral_error_max = 0.5
         self.heading_error_max = ca.pi * 40 / 180
         self.dmin = 0.
         self.allowed_dist = 2
+
+    def set_parameters(self, param):
+        self.base = param["base"]
+        self.LF = param["LF"]  # distance from rear to vehicle front end
+        self.LB = param["LB"]  # distance from rear to vehicle back end
 
     def Array2SX(self, array):
         rows, cols = np.shape(array)
@@ -52,7 +58,7 @@ class CasADi_MPC_reference_line:
 
         return ca.reshape(sx, rows, cols)
 
-    def init_dynamic_constraints(self, x, dt, gx):
+    def init_dynamic_constraints(self, x, dt, x0, gx):
         for i in range(self.horizon - 1):
             x_ = x[0, i]
             y_ = x[1, i]
@@ -62,8 +68,10 @@ class CasADi_MPC_reference_line:
             a_ = x[5, i]
             steer_rate_ = x[6, i]
             jerk_ = x[7, i]
-            # e_ = x[8, i]
+            e_ = x[8, i]
             # psi_ = x[9, i]
+            kappa_r = ca.tan(x0[4, i]) / self.base
+            yaw_r = x0[2, i]
 
             k1_dx = v_ * ca.cos(yaw_)
             k1_dy = v_ * ca.sin(yaw_)
@@ -71,7 +79,7 @@ class CasADi_MPC_reference_line:
             k1_dv = a_
             k1_dsteer = steer_rate_
             k1_da = jerk_
-            # k1_de = v_ * ca.sin(psi_)
+            k1_de = v_ * (1 - e_ * kappa_r) * ca.tan(yaw_ - yaw_r)
             # k1_dpsi = k1_dyaw - v_ * ca.cos(psi_) * ca.tan(steer_) / (self.base - ca.tan(steer_) * e_)
 
             k2_dx = (v_ + 0.5 * dt * k1_dv) * ca.cos(yaw_ + 0.5 * dt * k1_dyaw)
@@ -80,6 +88,8 @@ class CasADi_MPC_reference_line:
             k2_dv = a_ + 0.5 * dt * k1_da
             k2_dsteer = steer_rate_
             k2_da = jerk_
+            k2_de = (v_ + 0.5 * dt * k1_dv) * (1 - (e_ + 0.5 * dt * k1_de) * kappa_r) * ca.tan(
+                yaw_ + 0.5 * dt * k1_dyaw - yaw_r)
             # k2_de = (v_ + 0.5 * dt * k1_dv) * ca.sin(psi_ + 0.5 * dt * k1_dpsi)
             # k2_dpsi = k2_dyaw - (v_ + 0.5 * dt * k1_dv) * ca.cos(psi_ + 0.5 * dt * k1_dpsi) * ca.tan(
             #     steer_ + 0.5 * dt * k1_dsteer) / (
@@ -91,6 +101,8 @@ class CasADi_MPC_reference_line:
             k3_dv = a_ + 0.5 * dt * k2_da
             k3_dsteer = steer_rate_
             k3_da = jerk_
+            k3_de = (v_ + 0.5 * dt * k2_dv) * (1 - (e_ + 0.5 * dt * k2_de) * kappa_r) * ca.tan(
+                yaw_ + 0.5 * dt * k2_dyaw - yaw_r)
             # k3_de = (v_ + 0.5 * dt * k2_dv) * ca.sin(psi_ + 0.5 * dt * k2_dpsi)
             # k3_dpsi = k3_dyaw - (v_ + 0.5 * dt * k2_dv) * ca.cos(psi_ + 0.5 * dt * k2_dpsi) * ca.tan(
             #     steer_ + 0.5 * dt * k2_dsteer) / (
@@ -102,6 +114,8 @@ class CasADi_MPC_reference_line:
             k4_dv = a_ + 0.5 * dt * k3_da
             k4_dsteer = steer_rate_
             k4_da = jerk_
+            k4_de = (v_ + 0.5 * dt * k3_dv) * (1 - (e_ + 0.5 * dt * k3_de) * kappa_r) * ca.tan(
+                yaw_ + 0.5 * dt * k3_dyaw - yaw_r)
             # k4_de = (v_ + 0.5 * dt * k3_dv) * ca.sin(psi_ + 0.5 * dt * k3_dpsi)
             # k4_dpsi = k4_dyaw - (v_ + 0.5 * dt * k3_dv) * ca.cos(psi_ + 0.5 * dt * k3_dpsi) * ca.tan(
             #     steer_ + 0.5 * dt * k3_dsteer) / (
@@ -113,7 +127,7 @@ class CasADi_MPC_reference_line:
             dv = dt * (k1_dv + 2 * k2_dv + 2 * k3_dv + k4_dv) / 6
             dsteer = dt * (k1_dsteer + 2 * k2_dsteer + 2 * k3_dsteer + k4_dsteer) / 6
             da = dt * (k1_da + 2 * k2_da + 2 * k3_da + k4_da) / 6
-            # de = dt * (k1_de + 2 * k2_de + 2 * k3_de + k4_de) / 6
+            de = dt * (k1_de + 2 * k2_de + 2 * k3_de + k4_de) / 6
             # dpsi = dt * (k1_dpsi + 2 * k2_dpsi + 2 * k3_dpsi + k4_dpsi) / 6
 
             gx[0, i] = x_ + dx - x[0, i + 1]
@@ -122,7 +136,7 @@ class CasADi_MPC_reference_line:
             gx[3, i] = v_ + dv - x[3, i + 1]
             gx[4, i] = steer_ + dsteer - x[4, i + 1]
             gx[5, i] = a_ + da - x[5, i + 1]
-            # gx[6, i] = e_ + de - x[8, i + 1]
+            gx[6, i] = e_ + de - x[8, i + 1]
             # gx[7, i] = psi_ + dpsi - x[9, i + 1]
 
         return gx
@@ -131,7 +145,7 @@ class CasADi_MPC_reference_line:
         bounds = ca.DM.zeros(2, self.horizon)
         for i in range(self.horizon):
             # fading_term = 1 / (1 + ca.power((i - self.horizon / 2), 2) * 36 / (self.horizon ** 2))  # 1/x**2 + 1
-            fading_term = 1 / (1 + i * 99 / self.horizon)**3  # 1/x + 1
+            fading_term = 1 / (1 + i * 99 / self.horizon) ** 3  # 1/x + 1
             bounds[0, i] = self.allowed_dist * ca.fabs(ca.cos(refpath[2, i])) * fading_term
             bounds[1, i] = self.allowed_dist * ca.fabs(ca.sin(refpath[2, i])) * fading_term
 
@@ -142,29 +156,29 @@ class CasADi_MPC_reference_line:
         ubx = ca.DM.zeros(self.nx, self.horizon)
         lbg = ca.DM.zeros(self.ng, self.horizon - 1)
         ubg = ca.DM.zeros(self.ng, self.horizon - 1)
-        bounds = self.get_fading_bounds(refpath)
+        # bounds = self.get_fading_bounds(refpath)
 
         for i in range(self.horizon):
-            lbx[0, i] = refpath[0, i] - bounds[0, i]
-            lbx[1, i] = refpath[1, i] - bounds[1, i]
+            lbx[0, i] = -ca.inf
+            lbx[1, i] = -ca.inf
             lbx[2, i] = -ca.pi / 2  # th
             lbx[3, i] = -self.v_max  # v
             lbx[4, i] = -self.steer_max  # steer
             lbx[5, i] = -self.a_max  # a
             lbx[6, i] = -self.steer_rate_max  # steer_rate
             lbx[7, i] = -self.jerk_max  # jerk
-            # lbx[8, i] = -self.lateral_error_max
+            lbx[8, i] = -self.lateral_error_max
             # lbx[9, i] = -self.heading_error_max
 
-            ubx[0, i] = refpath[0, i] + bounds[0, i]
-            ubx[1, i] = refpath[1, i] + bounds[0, i]
+            ubx[0, i] = ca.inf
+            ubx[1, i] = ca.inf
             ubx[2, i] = ca.pi  # th
             ubx[3, i] = self.v_max  # v
             ubx[4, i] = self.steer_max  # steer
             ubx[5, i] = self.a_max  # a
             ubx[6, i] = self.steer_rate_max  # steer_rate
             ubx[7, i] = self.jerk_max  # jerk
-            # ubx[8, i] = self.lateral_error_max
+            ubx[8, i] = self.lateral_error_max
             # ubx[9, i] = self.heading_error_max
 
         lbx[0, 0] = refpath[0, 0]
@@ -280,7 +294,7 @@ class CasADi_MPC_reference_line:
 
         # initialize constraints
         g1 = ca.SX.sym("g1", self.ng, self.horizon - 1)
-        g1 = self.init_dynamic_constraints(x, dt, g1)
+        g1 = self.init_dynamic_constraints(x, dt, x0_, g1)
         x_ = ca.reshape(x, -1, 1)
         X = ca.vertcat(dt, x_)
         G = ca.reshape(g1, -1, 1)
@@ -317,10 +331,19 @@ class CasADi_MPC_reference_line:
 
 if __name__ == '__main__':
     start_time = time.time()
+    large = True
+    if large:
+        address = "../config_OBCA_large.yaml"
+    else:
+        address = "../config_OBCA.yaml"
+    with open(address, 'r', encoding='utf-8') as f:
+        param = yaml.load(f)
 
     ut = UTurnMPC()
+    ut.set_parameters(param)
     # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
     cmpc = CasADi_MPC_reference_line()
+    cmpc.set_parameters(param)
     ref_traj, ob, obst = ut.initialize_saved_data()
     shape = ut.get_car_shape()
 

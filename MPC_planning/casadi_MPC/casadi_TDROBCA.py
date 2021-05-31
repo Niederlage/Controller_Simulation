@@ -32,6 +32,11 @@ class CasADi_MPC_TDROBCA:
         self.jerk_max = 3.
         self.dmin = 0.
 
+    def set_parameters(self, param):
+        self.base = param["base"]
+        self.LF = param["LF"]  # distance from rear to vehicle front end
+        self.LB = param["LB"]  # distance from rear to vehicle back end
+
     def Array2SX(self, array):
         rows, cols = np.shape(array)
         sx = ca.SX.zeros(rows * cols, 1)
@@ -215,8 +220,8 @@ class CasADi_MPC_TDROBCA:
         ubg[6:6 + 2 * self.obst_num, :] = 1e-3
 
         # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i + dmin == 0
-        lbg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 0.
-        ubg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 0.  # 1e-5
+        lbg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 1e-5
+        ubg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 1e-5  # 1e-5
 
         # constraint3  norm_2(Aj.T @ lambdaj) <=1
         lbg[6 + 3 * self.obst_num:6 + 4 * self.obst_num, :] = 0.
@@ -256,7 +261,7 @@ class CasADi_MPC_TDROBCA:
         x0 = ca.DM(self.nx, self.horizon)
         diff_s = np.diff(reference_path[:2, :], axis=1)
         sum_s = np.sum(np.hypot(diff_s[0], diff_s[1]))
-        self.dt0 = 1.3* (sum_s / self.v_max + self.v_max / self.a_max) / self.horizon
+        self.dt0 = 1.3 * (sum_s / self.v_max + self.v_max / self.a_max) / self.horizon
         last_v = 0.
         last_a = 0.
         last_steer = 0.

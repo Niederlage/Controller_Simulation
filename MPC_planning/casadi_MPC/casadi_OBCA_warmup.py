@@ -24,8 +24,10 @@ class CasADi_MPC_WarmUp:
         self.wg = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1]
         self.dmin = -1e-6
 
-    def adapt_g_shape(self):
-        self.ng = self.obst_num * 4
+    def set_parameters(self, param):
+        self.base = param["base"]
+        self.LF = param["LF"]  # distance from rear to vehicle front end
+        self.LB = param["LB"]  # distance from rear to vehicle back end
 
     def Array2SX(self, array):
         rows, cols = np.shape(array)
@@ -87,11 +89,11 @@ class CasADi_MPC_WarmUp:
         ubg = ca.DM(self.ng, self.horizon - 1)
 
         for i in range(self.horizon - 1):
-            lbx[:self.obst_num, i] = -1e-1  # dist
+            lbx[:self.obst_num, i] = -1e-5   # dist
             lbx[self.obst_num:, i] = 0.  # lambda, mu
 
-            ubx[:self.obst_num, i] = -1e-10  # dist
-            ubx[self.obst_num:, i] = -1e-2  # lambda, mu
+            ubx[:self.obst_num, i] = 0. # dist
+            ubx[self.obst_num:, i] = 1e-2  # lambda, mu
 
             # # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i + d == 0
             lbg[2 * self.obst_num:3 * self.obst_num, i] = 1e-10
@@ -134,8 +136,7 @@ class CasADi_MPC_WarmUp:
     def init_model_warmup(self, reference_path, shape_m, obst_m):
         self.horizon = reference_path.shape[1]
         self.obst_num = len(obst_m)
-        self.adapt_g_shape()
-
+        self.ng = 4 * len(obst_m)
         # initialize variables
         d_ = ca.SX.sym("d", self.obst_num, self.horizon)  # dist
         lambda_ = ca.SX.sym("l", 4 * self.obst_num, self.horizon)

@@ -14,18 +14,34 @@ from scipy.spatial.transform import Rotation as Rot
 
 class CarModel:
     def __init__(self):
-        self.WB = 2.  # rear to front wheel [m]
-        self.W = 2.  # width of car
-        self.LF = 3.  # distance from rear to vehicle front end
-        self.LB = 1.  # distance from rear to vehicle back end
+        self.WB = 0.4  # rear to front wheel [m]
+        self.W = 0.6  # width of car
+        self.LF = 0.6  # distance from rear to vehicle front end
+        self.LB = 0.2  # distance from rear to vehicle back end
         self.MAX_STEER = 40 / 180 * np.pi  # [rad] maximum steering angle
-        self.SAFE_FRONT = self.LF + 0.2
-        self.SAFE_BACK = self.LB + 0.2
-        self.SAFE_WIDTH = self.W + 0.2
+        self.SAFE_FRONT = self.LF + 0.1
+        self.SAFE_BACK = self.LB + 0.1
+        self.SAFE_WIDTH = self.W + 0.1
         self.W_BUBBLE_DIST = (self.LF - self.LB) / 2.0
         self.W_BUBBLE_R = sqrt(((self.LF + self.LB) / 2.0) ** 2 + 1)
 
         # vehicle rectangle vertices need at least 5 edges to draw all vertices
+        self.VRX = [self.LF, -self.LB, -self.LB,
+                    0., 0., 0., self.LF, self.LF]  #
+        self.VRY = [self.W / 2, self.W / 2, -self.W / 2, -self.W / 2,
+                    self.W / 2, -self.W / 2, -self.W / 2, self.W / 2]
+
+    def set_parameters(self, param):
+        self.base = param["base"]
+        self.LF = param["LF"]  # distance from rear to vehicle front end
+        self.LB = param["LB"]  # distance from rear to vehicle back end
+        self.W = param["W"]
+        self.SAFE_FRONT = self.LF + 0.1
+        self.SAFE_BACK = self.LB + 0.1
+        self.SAFE_WIDTH = self.W + 0.1
+        self.W_BUBBLE_DIST = (self.LF - self.LB) / 2.0
+        self.W_BUBBLE_R = sqrt(((self.LF + self.LB) / 2.0) ** 2 + 1)
+
         self.VRX = [self.LF, -self.LB, -self.LB,
                     0., 0., 0., self.LF, self.LF]  #
         self.VRY = [self.W / 2, self.W / 2, -self.W / 2, -self.W / 2,

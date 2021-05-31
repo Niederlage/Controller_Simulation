@@ -1,24 +1,30 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
 # Author:tongjue.chen@fau.de
-
 import matplotlib.pyplot as plt
+plt.switch_backend('TkAgg')
 import numpy as np
 from gears.polygon_generator import cal_coeff_mat
 
 
 class UTurnMPC():
     def __init__(self):
-        self.L = 2.0
+        self.L = 0.4
         self.dt = 1e-1
-        self.W = 2.  # width of car
-        self.LF = 3.  # distance from rear to vehicle front end
-        self.LB = 1.  # distance from rear to vehicle back end
+        self.W = 0.6  # width of car
+        self.LF = 0.6  # distance from rear to vehicle front end
+        self.LB = 0.2  # distance from rear to vehicle back end
         self.predicted_trajectory = None
         self.optimal_dt = None
         self.show_animation = True
         self.reserve_footprint = False
         self.plot_arrows = False
+
+    def set_parameters(self, param):
+        self.L = param["base"]
+        self.LF = param["LF"]  # distance from rear to vehicle front end
+        self.LB = param["LB"]  # distance from rear to vehicle back end
+        self.W = param["W"]
 
     def motion_model(self, zst, u_in, dt):
         vr = u_in[0]

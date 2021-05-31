@@ -24,8 +24,10 @@ class CasADi_MPC_WarmUp:
         self.wg = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1]
         self.dmin = -1e-6
 
-    def adapt_g_shape(self):
-        self.ng = self.obst_num * 4
+    def set_parameters(self, param):
+        self.base = param["base"]
+        self.LF = param["LF"]  # distance from rear to vehicle front end
+        self.LB = param["LB"]  # distance from rear to vehicle back end
 
     def Array2SX(self, array):
         rows, cols = np.shape(array)
