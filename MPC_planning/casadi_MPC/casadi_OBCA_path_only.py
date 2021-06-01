@@ -38,30 +38,30 @@ class CasADi_MPC_OBCA_PathOnly:
             y_ = x[1, i]
             yaw_ = x[2, i]
             steer_ = x[3, i]
+            #
+            # dx = d_res * ca.cos(yaw_)
+            # dy = d_res * ca.sin(yaw_)
+            # dyaw = d_res / self.base * ca.tan(steer_)
 
-            dx = d_res * ca.cos(yaw_)
-            dy = d_res * ca.sin(yaw_)
-            dyaw = d_res / self.base * ca.tan(steer_)
+            k1_dx = d_res * ca.cos(yaw_)
+            k1_dy = d_res * ca.sin(yaw_)
+            k1_dyaw = d_res / self.base * ca.tan(steer_)
 
-            # k1_dx = d_res * ca.cos(yaw_)
-            # k1_dy = d_res * ca.sin(yaw_)
-            # k1_dyaw = d_res / self.base * ca.tan(steer_)
-            #
-            # k2_dx = d_res * ca.cos(yaw_ + 0.5 * k1_dyaw)
-            # k2_dy = d_res * ca.sin(yaw_ + 0.5 * k1_dyaw)
-            # k2_dyaw = d_res / self.base * ca.tan(steer_)
-            #
-            # k3_dx = d_res * ca.cos(yaw_ + 0.5 * k2_dyaw)
-            # k3_dy = d_res * ca.sin(yaw_ + 0.5 * k2_dyaw)
-            # k3_dyaw = d_res / self.base * ca.tan(steer_)
-            #
-            # k4_dx = d_res * ca.cos(yaw_ + 0.5 * k3_dyaw)
-            # k4_dy = d_res * ca.sin(yaw_ + 0.5 * k3_dyaw)
-            # k4_dyaw = d_res / self.base * ca.tan(steer_)
-            #
-            # dx = (k1_dx + 2 * k2_dx + 2 * k3_dx + k4_dx) / 6
-            # dy = (k1_dy + 2 * k2_dy + 2 * k3_dy + k4_dy) / 6
-            # dyaw = (k1_dyaw + 2 * k2_dyaw + 2 * k3_dyaw + k4_dyaw) / 6
+            k2_dx = d_res * ca.cos(yaw_ + 0.5 * k1_dyaw)
+            k2_dy = d_res * ca.sin(yaw_ + 0.5 * k1_dyaw)
+            k2_dyaw = d_res / self.base * ca.tan(steer_)
+
+            k3_dx = d_res * ca.cos(yaw_ + 0.5 * k2_dyaw)
+            k3_dy = d_res * ca.sin(yaw_ + 0.5 * k2_dyaw)
+            k3_dyaw = d_res / self.base * ca.tan(steer_)
+
+            k4_dx = d_res * ca.cos(yaw_ + 0.5 * k3_dyaw)
+            k4_dy = d_res * ca.sin(yaw_ + 0.5 * k3_dyaw)
+            k4_dyaw = d_res / self.base * ca.tan(steer_)
+
+            dx = (k1_dx + 2 * k2_dx + 2 * k3_dx + k4_dx) / 6
+            dy = (k1_dy + 2 * k2_dy + 2 * k3_dy + k4_dy) / 6
+            dyaw = (k1_dyaw + 2 * k2_dyaw + 2 * k3_dyaw + k4_dyaw) / 6
 
             gx[0, i] = x_ + dx - x[0, i + 1]
             gx[1, i] = y_ + dy - x[1, i + 1]

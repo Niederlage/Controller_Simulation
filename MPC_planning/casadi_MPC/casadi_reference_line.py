@@ -28,7 +28,7 @@ class CasADi_MPC_reference_line:
         self.steer_max = ca.pi * 40 / 180
         self.omega_max = ca.pi
         self.a_max = 3.
-        self.steer_rate_max = ca.pi * 40 / 180
+        self.steer_rate_max = ca.pi * 60 / 180
         self.jerk_max = 3.
         self.lateral_error_max = 0.5
         self.heading_error_max = ca.pi * 40 / 180
@@ -141,16 +141,6 @@ class CasADi_MPC_reference_line:
 
         return gx
 
-    def get_fading_bounds(self, refpath):
-        bounds = ca.DM.zeros(2, self.horizon)
-        for i in range(self.horizon):
-            # fading_term = 1 / (1 + ca.power((i - self.horizon / 2), 2) * 36 / (self.horizon ** 2))  # 1/x**2 + 1
-            fading_term = 1 / (1 + i * 99 / self.horizon) ** 3  # 1/x + 1
-            bounds[0, i] = self.allowed_dist * ca.fabs(ca.cos(refpath[2, i])) * fading_term
-            bounds[1, i] = self.allowed_dist * ca.fabs(ca.sin(refpath[2, i])) * fading_term
-
-        return bounds
-
     def init_bounds_reference_line(self, refpath):
         lbx = ca.DM.zeros(self.nx, self.horizon)
         ubx = ca.DM.zeros(self.nx, self.horizon)
@@ -191,14 +181,14 @@ class CasADi_MPC_reference_line:
         ubx[2, 0] = refpath[2, 0]
         ubx[3:, 0] = 0.
 
-        lbx[0, -1] = refpath[0, -1]
-        lbx[1, -1] = refpath[1, -1]
-        lbx[2, -1] = refpath[2, -1]
+        # lbx[0, -1] = refpath[0, -1]
+        # lbx[1, -1] = refpath[1, -1]
+        # lbx[2, -1] = refpath[2, -1]
         lbx[3:, -1] = 0.
 
-        ubx[0, -1] = refpath[0, -1]
-        ubx[1, -1] = refpath[1, -1]
-        ubx[2, -1] = refpath[2, -1]
+        # ubx[0, -1] = refpath[0, -1]
+        # ubx[1, -1] = refpath[1, -1]
+        # ubx[2, -1] = refpath[2, -1]
         ubx[3:, -1] = 0.
 
         lbx_ = ca.reshape(lbx, -1, 1)
@@ -211,7 +201,7 @@ class CasADi_MPC_reference_line:
 
         return lbx_, ubx_, lbg_, ubg_
 
-    def init_objects(self, x, dt, ref_path):
+    def init_objects1(self, x, dt, ref_path):
         sum_total_dist = 0
         sum_time = 0
         sum_vel = 0
@@ -241,6 +231,36 @@ class CasADi_MPC_reference_line:
               + self.wg[3] * sum_vel + self.wg[6] * sum_steer \
               + self.wg[3] * sum_a + self.wg[5] * sum_steer_rate \
               + self.wg[3] * sum_dist_to_ref + self.wg[4] * sum_jerk  # + self.wg[4] * sum_e + self.wg[4] * sum_psi
+
+        return obj
+
+    def init_objects(self, x, dt, ref_path):
+        sum_total_dist = 0
+        sum_time = 0
+        sum_vel = 0
+        sum_steer = 0
+        sum_a = 0
+        sum_steer_rate = 0
+        sum_dist_to_ref = 0
+        sum_jerk = 0
+        sum_states = 0.
+        sum_yaw = 0.
+        sum_e = 0
+        # sum_psi = 0
+
+        for i in range(self.horizon):
+            sum_time += ca.power(dt, 2)
+            sum_states += ca.sumsqr(x[:, i])
+            sum_dist_to_ref += ca.sumsqr(x[:2, i] - ref_path[:2, i])
+            sum_e += ca.power(x[8, i], 2)
+            # sum_psi += ca.power(x[9, i], 2)
+
+            if i > 1:
+                sum_total_dist += ca.sumsqr(x[:, i] - x[:, i - 1])
+                sum_yaw += ca.power(x[2, i] - x[2, i - 1], 2)
+
+        obj = self.wg[6] * sum_states + self.wg[9] * sum_time + self.wg[3] * sum_dist_to_ref + \
+              self.wg[3] * sum_e + 1e2 * self.wg[9] * ca.sumsqr(x[:3, -1] - ref_path[:3, -1])
 
         return obj
 

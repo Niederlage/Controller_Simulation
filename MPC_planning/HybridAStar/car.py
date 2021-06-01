@@ -32,13 +32,13 @@ class CarModel:
                     self.W / 2, -self.W / 2, -self.W / 2, self.W / 2]
 
     def set_parameters(self, param):
-        self.base = param["base"]
+        self.WB = param["base"]
         self.LF = param["LF"]  # distance from rear to vehicle front end
         self.LB = param["LB"]  # distance from rear to vehicle back end
         self.W = param["W"]
-        self.SAFE_FRONT = self.LF + 0.1
-        self.SAFE_BACK = self.LB + 0.1
-        self.SAFE_WIDTH = self.W + 0.1
+        self.SAFE_FRONT = self.LF
+        self.SAFE_BACK = self.LB
+        self.SAFE_WIDTH = self.W
         self.W_BUBBLE_DIST = (self.LF - self.LB) / 2.0
         self.W_BUBBLE_R = sqrt(((self.LF + self.LB) / 2.0) ** 2 + 1)
 
@@ -46,6 +46,7 @@ class CarModel:
                     0., 0., 0., self.LF, self.LF]  #
         self.VRY = [self.W / 2, self.W / 2, -self.W / 2, -self.W / 2,
                     self.W / 2, -self.W / 2, -self.W / 2, self.W / 2]
+        print("")
 
     def check_car_collision(self, x_list, y_list, yaw_list, ox, oy, kd_tree):
         for i_x, i_y, i_yaw in zip(x_list, y_list, yaw_list):

@@ -25,7 +25,7 @@ class HybridAStar:
     def __init__(self):
         self.XY_GRID_RESOLUTION = 1  # [ m / grid]
         self.YAW_GRID_RESOLUTION = np.deg2rad(5.0)  # [rad/ grid]
-        self.MOTION_RESOLUTION = 0.1  # [m/ grid] path interpolate resolution
+        self.MOTION_RESOLUTION = 0.2  # [m/ grid] path interpolate resolution
         self.N_STEER = 7  # number of steer command
         self.ROBOT_RADIUS = 1.0  # robot radius
 
@@ -321,91 +321,89 @@ class HybridAStar:
 
         return ind
 
-
-def generate_obmap(loadmap=False):
-    if loadmap:
-        load = np.load("../data/saved_obmap.npz", allow_pickle=True)
-        v1 = load["pointmap"][0]
-        v2 = load["pointmap"][1]
-        v3 = load["pointmap"][2]
-        return np.block([v1.T, v2.T, v3.T])
-    else:
-        ox, oy = [], []
-        for i in range(10):
-            ox.append(i)
-            oy.append(25)
-        for i in range(40):  # 60
-            ox.append(i)
-            oy.append(0.0)
-        # for i in range(60):
-        #     ox.append(60.0)
-        #     oy.append(i)
-        for i in range(41):  # 61
-            ox.append(i)
-            oy.append(60.0)
-        for i in range(61):
-            ox.append(0.0)
-            oy.append(i)
-        for i in range(40):
-            ox.append(20.0)
-            oy.append(i)
-        for i in range(60):
-            ox.append(40.0)
-            oy.append(i)
-        for i in range(10):
-            ox.append(25.0)
-            oy.append(60 - i)
-        for i in range(10):
-            ox.append(10 + i)
-            oy.append(40)
-        for i in range(10):
-            ox.append(20 + i)
-            oy.append(40)
-
-        return np.array([ox, oy])
-
-
-def init_startpoints(planner, loadmap=True,large=True):
-    print("Start Hybrid A* planning")
-    if loadmap:
-        if large:
-            address = "../config_OBCA_large.yaml"
+    def generate_obmap(self, loadmap=False):
+        if loadmap:
+            load = np.load("../data/saved_obmap.npz", allow_pickle=True)
+            v1 = load["pointmap"][0]
+            v2 = load["pointmap"][1]
+            v3 = load["pointmap"][2]
+            return np.block([v1.T, v2.T, v3.T])
         else:
-            address = "../config_OBCA.yaml"
-        with open(address, 'r', encoding='utf-8') as f:
-            param = yaml.load(f)
-        sx = param["start"]
-        ex = param["goal"]
-        start = [sx[0], sx[1], np.deg2rad(sx[2])]
-        goal = [ex[0], ex[1], np.deg2rad(ex[2])]
-        if large:
-            planner.car.set_parameters(param)
-    else:
-        # Set Initial parameters
-        start = [10.0, 10.0, np.deg2rad(90.0)]
-        goal = [20.0, 45.0, np.deg2rad(0.0)]
+            ox, oy = [], []
+            for i in range(10):
+                ox.append(i)
+                oy.append(25)
+            for i in range(40):  # 60
+                ox.append(i)
+                oy.append(0.0)
+            # for i in range(60):
+            #     ox.append(60.0)
+            #     oy.append(i)
+            for i in range(41):  # 61
+                ox.append(i)
+                oy.append(60.0)
+            for i in range(61):
+                ox.append(0.0)
+                oy.append(i)
+            for i in range(40):
+                ox.append(20.0)
+                oy.append(i)
+            for i in range(60):
+                ox.append(40.0)
+                oy.append(i)
+            for i in range(10):
+                ox.append(25.0)
+                oy.append(60 - i)
+            for i in range(10):
+                ox.append(10 + i)
+                oy.append(40)
+            for i in range(10):
+                ox.append(20 + i)
+                oy.append(40)
 
-    obst = generate_obmap(loadmap=loadmap)
+            return np.array([ox, oy])
 
-    print("start : ", start)
-    print("goal : ", goal)
-    return start, goal, obst
+    def init_startpoints(self, loadmap=True, large=True):
+        print("Start Hybrid A* planning")
+        if loadmap:
+            if large:
+                address = "../config_OBCA_large.yaml"
+            else:
+                address = "../config_OBCA.yaml"
+            with open(address, 'r', encoding='utf-8') as f:
+                param = yaml.load(f)
+            sx = param["start"]
+            ex = param["goal"]
+            start = [sx[0], sx[1], np.deg2rad(sx[2])]
+            goal = [ex[0], ex[1], np.deg2rad(ex[2])]
+            if large:
+                self.car.set_parameters(param)
+        else:
+            # Set Initial parameters
+            start = [10.0, 10.0, np.deg2rad(90.0)]
+            goal = [20.0, 45.0, np.deg2rad(0.0)]
 
+        obst = self.generate_obmap(loadmap=loadmap)
 
-def save_planned_path(path, planner, obst):
-    x = path.x_list
-    y = path.y_list
-    yaw = path.yaw_list
+        print("start : ", start)
+        print("goal : ", goal)
+        return start, goal, obst
 
-    saved_hybrid_a_star_traj = np.array([x, y, yaw]) / planner.XY_GRID_RESOLUTION
-    saved_hybrid_a_star_traj[2, :] *= planner.XY_GRID_RESOLUTION
-    saved_hybrid_a_star_ob = obst / planner.XY_GRID_RESOLUTION
-    np.savez("../data/saved_hybrid_a_star.npz", saved_traj=saved_hybrid_a_star_traj, saved_ob=saved_hybrid_a_star_ob)
+    def save_planned_path(self, path, planner, obst):
+        x = path.x_list
+        y = path.y_list
+        yaw = path.yaw_list
+
+        saved_hybrid_a_star_traj = np.array([x, y, yaw]) / planner.XY_GRID_RESOLUTION
+        saved_hybrid_a_star_traj[2, :] *= planner.XY_GRID_RESOLUTION
+        saved_hybrid_a_star_ob = obst / planner.XY_GRID_RESOLUTION
+        np.savez("../data/saved_hybrid_a_star.npz", saved_traj=saved_hybrid_a_star_traj,
+                 saved_ob=saved_hybrid_a_star_ob)
 
 
 def main():
     planner = HybridAStar()
-    start, goal, obst = init_startpoints(planner)
+    start, goal, obst = planner.init_startpoints()
 
     if planner.show_animation:
         plt.plot(obst[0], obst[1], ".k")
@@ -418,7 +416,7 @@ def main():
     print(1)
     path = planner.hybrid_a_star_planning(start, goal, obst)
 
-    save_planned_path(path, planner, obst)
+    planner.save_planned_path(path, planner, obst)
 
     if planner.show_animation:
         for i_x, i_y, i_yaw in zip(path.x_list, path.y_list, path.yaw_list):

@@ -2,7 +2,7 @@ import casadi as ca
 import numpy as np
 import time
 from mpc_motion_plot import UTurnMPC
-
+import yaml
 
 class CasADi_MPC_TDROBCA:
     def __init__(self):
@@ -167,22 +167,29 @@ class CasADi_MPC_TDROBCA:
         sum_steer_rate = 0
         sum_dist_to_ref = 0
         sum_jerk = 0
+
         sum_mindist = 0
-
+        sum_states = 0
+        sum_states_rate = 0
         for i in range(self.horizon):
-            sum_vel += ca.power(x_[3, i] / self.dt0, 2)
-            sum_a += ca.power(x_[5, i] / (self.dt0 ** 2), 2)
-            sum_jerk += ca.power(x_[6, i] / (self.dt0 ** 3), 2)
-            sum_steer_rate += ca.power(x_[6, i] / (self.dt0), 2)
-            sum_dist_to_ref += ca.sumsqr(x_[:3, i] - ref_path[:3, i])
+            # sum_vel += ca.power(x_[3, i] / self.dt0, 2)
+            # sum_a += ca.power(x_[5, i] / (self.dt0 ** 2), 2)
+            # sum_jerk += ca.power(x_[6, i] / (self.dt0 ** 3), 2)
+            # sum_steer_rate += ca.power(x_[6, i] / (self.dt0), 2)
+            # sum_dist_to_ref += ca.sumsqr(x_[:3, i] - ref_path[:3, i])
+            sum_states += ca.sumsqr(x_[:, i])
             sum_mindist += ca.sumsqr(d_[:, i])
-            if i > 1:
-                sum_total_dist += ca.sumsqr(x_[:2, i] - x_[:2, i - 1])
-                sum_steer += ca.power(x_[4, i] - x_[4, i - 1], 2)
+            if i > 0:
+                sum_states_rate += ca.sumsqr(x_[:, i] - x_[:, i - 1])
+                # sum_total_dist += ca.sumsqr(x_[:2, i] - x_[:2, i - 1])
+                # sum_steer += ca.power(x_[4, i] - x_[4, i - 1], 2)
 
-        obj = self.wg[6] * sum_total_dist + self.wg[3] * sum_vel + self.wg[6] * sum_steer \
-              + self.wg[3] * sum_a + self.wg[5] * sum_steer_rate \
-              + self.wg[3] * sum_dist_to_ref + self.wg[4] * sum_jerk + 5e14 * self.wg[9] * sum_mindist
+        # obj = self.wg[6] * sum_total_dist + self.wg[3] * sum_vel + self.wg[6] * sum_steer \
+        #       + self.wg[3] * sum_a + self.wg[5] * sum_steer_rate \
+        #       + self.wg[3] * sum_dist_to_ref + self.wg[4] * sum_jerk + 5e14 * self.wg[9] * sum_mindist
+
+        obj = self.wg[6] * sum_states + self.wg[3] * sum_states_rate + 1e1 * self.wg[9] * sum_mindist \
+              + 1e7 * self.wg[9] * ca.sumsqr(x_[:3, -1] - ref_path[:3, -1])
 
         return obj
 
@@ -195,7 +202,7 @@ class CasADi_MPC_TDROBCA:
         for i in range(self.horizon):
             lbx[0, i] = -10.  # x
             ubx[0, i] = 10.  # x
-            lbx[1, i] = 1.  # y
+            lbx[1, i] = 0.  # y
             ubx[1, i] = 10.  # 1.1y
             lbx[2, i] = -ca.pi  # th
             ubx[2, i] = ca.pi  # th
@@ -210,18 +217,18 @@ class CasADi_MPC_TDROBCA:
             lbx[7, i] = -self.jerk_max  # jerk
             ubx[7, i] = self.jerk_max  # jerk
 
-            lbx[8:-self.obst_num, i] = 1e-8  # lambda, mu
+            lbx[8:-self.obst_num, i] = 1e-7  # lambda, mu
             ubx[8:-self.obst_num, i] = 1.  # lambda, mu
-            lbx[-self.obst_num:, i] = -1e-1  # dmin
+            lbx[-self.obst_num:, i] = -1.  # dmin
             ubx[-self.obst_num:, i] = -1e-3  # -4e-5  # dmin
 
         # constraint1 rotT_i @ Aj.T @ lambdaj + GT @ mu_i == 0
         lbg[6:6 + 2 * self.obst_num, :] = 0.
-        ubg[6:6 + 2 * self.obst_num, :] = 1e-3
+        ubg[6:6 + 2 * self.obst_num, :] = 0.
 
         # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i + dmin == 0
-        lbg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 1e-5
-        ubg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 1e-5  # 1e-5
+        lbg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 0.
+        ubg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 0.  # 1e-5
 
         # constraint3  norm_2(Aj.T @ lambdaj) <=1
         lbg[6 + 3 * self.obst_num:6 + 4 * self.obst_num, :] = 0.
@@ -237,14 +244,14 @@ class CasADi_MPC_TDROBCA:
         ubx[2, 0] = start[2]
         ubx[3:, 0] = 0.
 
-        lbx[0, -1] = goal[0]
-        lbx[1, -1] = goal[1]
-        lbx[2, -1] = goal[2]
+        # lbx[0, -1] = goal[0]
+        # lbx[1, -1] = goal[1]
+        # lbx[2, -1] = goal[2]
         lbx[3:, -1] = 0.
 
-        ubx[0, -1] = goal[0]
-        ubx[1, -1] = goal[1]
-        ubx[2, -1] = goal[2]
+        # ubx[0, -1] = goal[0]
+        # ubx[1, -1] = goal[1]
+        # ubx[2, -1] = goal[2]
         ubx[3:, -1] = 0.
 
         lbx_ = ca.reshape(lbx, -1, 1)
@@ -261,7 +268,8 @@ class CasADi_MPC_TDROBCA:
         x0 = ca.DM(self.nx, self.horizon)
         diff_s = np.diff(reference_path[:2, :], axis=1)
         sum_s = np.sum(np.hypot(diff_s[0], diff_s[1]))
-        self.dt0 = 1.3 * (sum_s / self.v_max + self.v_max / self.a_max) / self.horizon
+        self.dt0 = 1.4 * (sum_s / self.v_max + self.v_max / self.a_max) / self.horizon
+
         last_v = 0.
         last_a = 0.
         last_steer = 0.
@@ -326,7 +334,7 @@ class CasADi_MPC_TDROBCA:
         nlp = {"x": X, "f": F, "g": G}
         opts_setting = {"expand": False,
                         "ipopt.hessian_approximation": "exact",
-                        'ipopt.max_iter': 100,
+                        'ipopt.max_iter': 200,
                         'ipopt.print_level': 3,
                         'print_time': 1,
                         'ipopt.acceptable_tol': 1e-8,
@@ -372,10 +380,19 @@ class CasADi_MPC_TDROBCA:
 if __name__ == '__main__':
     start_time = time.time()
 
+    large = True
+    if large:
+        address = "../config_OBCA_large.yaml"
+    else:
+        address = "../config_OBCA.yaml"
+    with open(address, 'r', encoding='utf-8') as f:
+        param = yaml.load(f)
+
     ut = UTurnMPC()
-    ut.reserve_footprint = True
+    ut.set_parameters(param)
     # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
     cmpc = CasADi_MPC_TDROBCA()
+    cmpc.set_parameters(param)
     ref_traj, ob, obst = ut.initialize_saved_data()
     shape = ut.get_car_shape()
 

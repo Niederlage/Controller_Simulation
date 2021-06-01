@@ -2,6 +2,7 @@
 # -*- coding:utf-8 -*-
 # Author:tongjue.chen@fau.de
 import matplotlib.pyplot as plt
+
 plt.switch_backend('TkAgg')
 import numpy as np
 from gears.polygon_generator import cal_coeff_mat
@@ -26,18 +27,52 @@ class UTurnMPC():
         self.LB = param["LB"]  # distance from rear to vehicle back end
         self.W = param["W"]
 
-    def motion_model(self, zst, u_in, dt):
-        vr = u_in[0]
-        ph = u_in[1]
-        x = zst[0]
-        y = zst[1]
-        th = zst[2]
+    def motion_model(self, zst, u_in, dt, Runge_Kutta=True):
+        v_ = u_in[0]
+        steer_ = u_in[1]
+        x_ = zst[0]
+        y_ = zst[1]
+        yaw_ = zst[2]
 
-        x += vr * np.cos(th) * dt
-        y += vr * np.sin(th) * dt
-        th += vr * np.tan(ph) / self.L * dt
+        if not Runge_Kutta:
+            x_ += v_ * np.cos(yaw_) * dt
+            y_ += v_ * np.sin(yaw_) * dt
+            yaw_ += v_ * np.tan(steer_) / self.L * dt
+            return np.array([x_, y_, yaw_])
+        else:
+            a_ = u_in[2]
+            steer_rate_ = u_in[3]
+            jerk_ = u_in[4]
 
-        return np.array([x, y, th])
+            k1_dx = v_ * np.cos(yaw_)
+            k1_dy = v_ * np.sin(yaw_)
+            k1_dyaw = v_ / self.L * np.tan(steer_)
+            k1_dv = a_
+            k1_dsteer = steer_rate_
+            k1_da = jerk_
+
+            k2_dx = (v_ + 0.5 * dt * k1_dv) * np.cos(yaw_ + 0.5 * dt * k1_dyaw)
+            k2_dy = (v_ + 0.5 * dt * k1_dv) * np.sin(yaw_ + 0.5 * dt * k1_dyaw)
+            k2_dyaw = (v_ + 0.5 * dt * k1_dv) / self.L * np.tan(steer_ + 0.5 * dt * k1_dsteer)
+            k2_dv = a_ + 0.5 * dt * k1_da
+            k2_dsteer = steer_rate_
+            k2_da = jerk_
+
+            k3_dx = (v_ + 0.5 * dt * k2_dv) * np.cos(yaw_ + 0.5 * dt * k2_dyaw)
+            k3_dy = (v_ + 0.5 * dt * k2_dv) * np.sin(yaw_ + 0.5 * dt * k2_dyaw)
+            k3_dyaw = (v_ + 0.5 * dt * k2_dv) / self.L * np.tan(steer_ + 0.5 * dt * k2_dsteer)
+            k3_dv = a_ + 0.5 * dt * k2_da
+            k3_dsteer = steer_rate_
+
+            k4_dx = (v_ + 0.5 * dt * k3_dv) * np.cos(yaw_ + 0.5 * dt * k3_dyaw)
+            k4_dy = (v_ + 0.5 * dt * k3_dv) * np.sin(yaw_ + 0.5 * dt * k3_dyaw)
+            k4_dyaw = (v_ + 0.5 * dt * k3_dv) / self.L * np.tan(steer_ + 0.5 * dt * k3_dsteer)
+
+            x_ += dt * (k1_dx + 2 * k2_dx + 2 * k3_dx + k4_dx) / 6
+            y_ += dt * (k1_dy + 2 * k2_dy + 2 * k3_dy + k4_dy) / 6
+            yaw_ += dt * (k1_dyaw + 2 * k2_dyaw + 2 * k3_dyaw + k4_dyaw) / 6
+
+            return np.array([x_, y_, yaw_])
 
     def plot_arrow(self, x, y, yaw, length=1.5, width=0.5):  # pragma: no cover
         plt.arrow(x, y, length * np.cos(yaw), length * np.sin(yaw),
@@ -120,16 +155,18 @@ class UTurnMPC():
 
         fig = plt.figure()
         ax = plt.subplot(211)
-        ax.plot(op_controls[0, :], label="v")
-        ax.plot(op_controls[1, :], label="steer")
+        ax.plot(op_controls[0, :], label="v", color="red")
         ax.plot(op_controls[2, :], "-.", label="acc")
-        ax.plot(op_controls[3, :], "-.", label="steer rate")
         ax.plot(op_controls[4, :], "-.", label="jerk")
         ax.grid()
         ax.legend()
-
+        yaw_rate = np.diff(op_trajectories[2, :]) / op_dt
+        yaw_rate_ = np.append(0., yaw_rate)
         ax = plt.subplot(212)
         ax.plot(op_trajectories[2, :] * 180 / np.pi, label="heading/grad")
+        ax.plot(yaw_rate_ * 180 / np.pi, label="yaw rate/grad")
+        ax.plot(op_controls[1, :] * 180 / np.pi, label="steer/grad", color="red")
+        ax.plot(op_controls[3, :] * 180 / np.pi, "-.", label="steer rate/grad")
         ax.grid()
         ax.legend()
 
@@ -175,7 +212,7 @@ class UTurnMPC():
                 plt.pause(0.01)
                 i += 1
 
-                if i >= op_trajectories.shape[1]:
+                if i > op_trajectories.shape[1]:
                     print("end point arrived...")
                     break
 
