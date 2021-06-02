@@ -41,6 +41,10 @@ class CasADi_MPC_WarmUp:
     def init_warmup_constraints(self, x0, d_, lambda_, mu_, shape, obst, gx):
         gT = self.Array2SX(shape[:, 2][:, None].T)
         GT = self.Array2SX(shape[:, :2].T)
+        lambda_v = ca.reshape(lambda_, -1, 1)
+        lambda_ = ca.reshape(lambda_v, self.horizon, 4 * self.obst_num).T
+        mu_v = ca.reshape(mu_, -1, 1)
+        mu_ = ca.reshape(mu_v, self.horizon, 4).T
 
         l_ob = len(obst)
         for i in range(self.horizon - 1):

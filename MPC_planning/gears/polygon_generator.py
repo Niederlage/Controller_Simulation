@@ -75,7 +75,7 @@ def monte_carlo_sample_test(constraints):
     return np.array(rdn_list)
 
 
-def get_polygon_map(use_sample_test=False,large=True):
+def get_polygon_map(use_sample_test=False, large=True):
     if large:
         obst1 = np.array([[-10, 6.],
                           [-3.5, 6.],
@@ -87,7 +87,7 @@ def get_polygon_map(use_sample_test=False,large=True):
         obst2 = Euclidean_Transform(obst1, tf_1)
         tf_2 = np.array([31 / 10, 1.])[:, None]
         obst3 = np.copy(Scale_Transformation(obst1, tf_2))
-        obst3 = Euclidean_Transform(obst3, np.array([21, 9, 0]))
+        obst3 = Euclidean_Transform(obst3, np.array([21, 10, 0]))
 
     else:
         obst1 = np.array([[0, 1.5],
@@ -197,9 +197,9 @@ if __name__ == '__main__':
             ax.plot(ob_[:, 0], ob_[:, 1], color="black")
         # ax.plot(30, 14, "gx", label="start")
         # ax.plot(20, 3, "rx", label="goal")
-    # ax.grid()
-    plt.subplots_adjust(top=1, bottom=0, left=0, right=1, hspace=0, wspace=0)
+    ax.grid()
+    # plt.subplots_adjust(top=1, bottom=0, left=0, right=1, hspace=0, wspace=0)
     plt.axis("equal")
-    plt.axis('off')
-    plt.savefig("fig1.png")
+    # plt.axis('off')
+    # plt.savefig("fig1.png")
     plt.show()

@@ -96,6 +96,23 @@ class UTurnMPC():
             arrow_x, arrow_y, arrow_yaw = x, y, yaw
             self.plot_arrow(arrow_x, arrow_y, arrow_yaw)
 
+    def plot_op_controls(self, v_, acc_, jerk_, yaw_, yaw_rate_, steer_, steer_rate_):
+        fig = plt.figure()
+        ax = plt.subplot(211)
+        ax.plot(v_, label="v", color="red")
+        ax.plot(acc_, "-.", label="acc")
+        ax.plot(jerk_, "-.", label="jerk")
+        ax.grid()
+        ax.legend()
+
+        ax = plt.subplot(212)
+        ax.plot(yaw_ * 180 / np.pi, label="heading/grad")
+        ax.plot(yaw_rate_ * 180 / np.pi, label="yaw rate/grad")
+        ax.plot(steer_ * 180 / np.pi, label="steer/grad", color="red")
+        ax.plot(steer_rate_ * 180 / np.pi, "-.", label="steer rate/grad")
+        ax.grid()
+        ax.legend()
+
     def try_tracking(self, zst, u_op, trajectory, obst=None, ref_traj=None):
         k = 0
         f = plt.figure()
@@ -142,7 +159,7 @@ class UTurnMPC():
 
         return trajectory
 
-    def plot_results(self, op_dt, op_trajectories, op_controls, ref_traj, ob):
+    def plot_results(self, op_dt, op_trajectories, op_controls, ref_traj, ob, four_states=False):
 
         self.predicted_trajectory = op_trajectories
         zst = ref_traj[:, 0]
@@ -151,26 +168,29 @@ class UTurnMPC():
         self.cal_distance(op_trajectories[:2, :], len(ref_traj.T))
         self.dt = op_dt
         print("Time resolution:{:.3f}s, total time:{:.3f}s".format(self.dt, self.dt * len(ref_traj.T)))
-        # np.savez("saved_traj", traj=predicted_trajectory)
 
-        fig = plt.figure()
-        ax = plt.subplot(211)
-        ax.plot(op_controls[0, :], label="v", color="red")
-        ax.plot(op_controls[2, :], "-.", label="acc")
-        ax.plot(op_controls[4, :], "-.", label="jerk")
-        ax.grid()
-        ax.legend()
-        yaw_rate = np.diff(op_trajectories[2, :]) / op_dt
+        yaw_ = op_trajectories[2, :]
+        yaw_rate = np.diff(yaw_) / op_dt
         yaw_rate_ = np.append(0., yaw_rate)
-        ax = plt.subplot(212)
-        ax.plot(op_trajectories[2, :] * 180 / np.pi, label="heading/grad")
-        ax.plot(yaw_rate_ * 180 / np.pi, label="yaw rate/grad")
-        ax.plot(op_controls[1, :] * 180 / np.pi, label="steer/grad", color="red")
-        ax.plot(op_controls[3, :] * 180 / np.pi, "-.", label="steer rate/grad")
-        ax.grid()
-        ax.legend()
+
+        v_ = op_controls[0, :]
+        steer_ = op_controls[1, :]
+        acc_ = op_controls[2, :]
+
+        if four_states:
+            steer_rate = np.diff(op_controls[1, :]) / op_dt
+            steer_rate_ = np.append(0., steer_rate)
+
+            jerk = np.diff(op_controls[2, :]) / op_dt
+            jerk_ = np.append(0., jerk)
+        else:
+            steer_rate_ = op_controls[3, :]
+            jerk_ = op_controls[4, :]
+
+        self.plot_op_controls(v_, acc_, jerk_, yaw_, yaw_rate_, steer_, steer_rate_)
 
         trajectory = self.try_tracking(zst, op_controls, trajectory, obst=ob, ref_traj=ref_traj)
+
         print("Done")
         plt.show()
 
@@ -188,7 +208,10 @@ class UTurnMPC():
         i = 0
         while True:
             if self.show_animation:
-                plt.cla()
+                if not self.reserve_footprint:
+                    plt.cla()
+                    self.plot_arrows = True
+
                 # for stopping simulation with the esc key.
                 plt.gcf().canvas.mpl_connect(
                     'key_release_event',
@@ -201,18 +224,21 @@ class UTurnMPC():
 
                 if obst is not None:
                     for obi in obst:
-                        plt.plot(obi[:, 0], obi[:, 1], "_", color="black", label="obstacles")
+                        plt.plot(obi[:, 0], obi[:, 1], color="black", label="obstacles")
 
                 plt.plot(op_trajectories[0, -1], op_trajectories[1, -1], "x", color="purple")
                 self.plot_robot(op_trajectories[0, i], op_trajectories[1, i], op_trajectories[2, i])
 
-                plt.legend()
+                if not self.reserve_footprint:
+                    handles, labels = ax.get_legend_handles_labels()
+                    ax.legend(handles, labels, fontsize=10, loc="upper left")
+
                 plt.axis("equal")
                 plt.grid(True)
-                plt.pause(0.01)
+                plt.pause(0.001)
                 i += 1
 
-                if i > op_trajectories.shape[1]:
+                if i >= op_trajectories.shape[1]:
                     print("end point arrived...")
                     break
 

@@ -6,6 +6,8 @@ from mpc_motion_plot import UTurnMPC
 from casadi_MPC.casadi_OBCA_warmup import CasADi_MPC_WarmUp
 from casadi_MPC.casadi_OBCA import CasADi_MPC_OBCA
 from casadi_MPC.casadi_TDROBCA import CasADi_MPC_TDROBCA
+# from casadi_MPC.casadi_TDROBCA_v2 import CasADi_MPC_TDROBCA
+# from casadi_MPC.casadi_TDROBCA_v3 import CasADi_MPC_TDROBCA
 from MPC_planning.HybridAStar.hybrid_a_star import HybridAStar
 
 
@@ -144,7 +146,7 @@ def main():
             op_dt, op_trajectories, op_controls = run_TDROBCA_mpc(param, ref_traj, shape, obst)
 
         print("warm up OBCA total time:{:.3f}s".format(time.time() - start_time))
-        ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, ob)
+        ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, ob, four_states=True)
 
     else:
         print("Hybrid A Star initialization failed ....")
