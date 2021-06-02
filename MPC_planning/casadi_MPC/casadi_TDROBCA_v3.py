@@ -115,10 +115,10 @@ class CasADi_MPC_TDROBCA:
         gT = self.Array2SX(shape[:, 2][:, None].T)
         GT = self.Array2SX(shape[:, :2].T)
 
-        lambda_v = ca.reshape(lambda_, -1, 1)
-        lambda_ = ca.reshape(lambda_v, self.horizon, 4 * self.obst_num).T
-        mu_v = ca.reshape(mu_, -1, 1)
-        mu_ = ca.reshape(mu_v, self.horizon, 4).T
+        # lambda_v = ca.reshape(lambda_, -1, 1)
+        # lambda_ = ca.reshape(lambda_v, self.horizon, 4 * self.obst_num).T
+        # mu_v = ca.reshape(mu_, -1, 1)
+        # mu_ = ca.reshape(mu_v, self.horizon, 4).T
 
         # G = ca.SX.zeros(4, 2)
         # G[0, 0] = 1
@@ -205,7 +205,7 @@ class CasADi_MPC_TDROBCA:
 
         obj = self.wg[1] * sum_states + self.wg[6] * sum_states_rate + self.wg[3] * sum_controls \
               + 1e1 * self.wg[9] * sum_controls_rate + 1e8 * self.wg[9] * ca.sumsqr(x_[:3, -1] - ref_path[:3, -1]) \
-              + 1e2 * self.wg[9] * sum_mindist
+              + 1e16 * self.wg[9] * sum_mindist
 
         return obj
 
@@ -229,13 +229,13 @@ class CasADi_MPC_TDROBCA:
             lbx[5, i] = -self.a_max  # a
             ubx[5, i] = self.a_max  # a
 
-            lbx[6:-self.obst_num, i] = 1e-7  # lambda, mu
+            lbx[6:-self.obst_num, i] = 1e-5  # lambda, mu
             ubx[6:-self.obst_num, i] = 1.  # lambda, mu
-            lbx[-self.obst_num:, i] = -10.  # dmin
-            ubx[-self.obst_num:, i] = -1e-8  # -4e-5  # dmin
+            lbx[-self.obst_num:, i] = -1e-5  # dmin
+            ubx[-self.obst_num:, i] = -1e-9  # -4e-5  # dmin
 
         # constraint1 rotT_i @ Aj.T @ lambdaj + GT @ mu_i == 0
-        lbg[self.ng:self.ng + 2 * self.obst_num, :] = 0.
+        lbg[self.ng:self.ng + 2 * self.obst_num, :] = 1e-5
         ubg[self.ng:self.ng + 2 * self.obst_num, :] = 1e-5
 
         # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i + dmin == 0
@@ -243,7 +243,7 @@ class CasADi_MPC_TDROBCA:
         ubg[self.ng + 2 * self.obst_num:self.ng + 3 * self.obst_num, :] = 0.  # 1e-5
 
         # constraint3  norm_2(Aj.T @ lambdaj) <=1
-        lbg[self.ng + 3 * self.obst_num:self.ng + 4 * self.obst_num, :] = 1.
+        lbg[self.ng + 3 * self.obst_num:self.ng + 4 * self.obst_num, :] = 0.
         ubg[self.ng + 3 * self.obst_num:self.ng + 4 * self.obst_num, :] = 1.
 
         lbx[0, 0] = start[0]
@@ -258,12 +258,12 @@ class CasADi_MPC_TDROBCA:
 
         # lbx[0, -1] = goal[0]
         # lbx[1, -1] = goal[1]
-        # lbx[2, -1] = goal[2]
+        lbx[2, -1] = goal[2]
         lbx[3:, -1] = 0.
 
         # ubx[0, -1] = goal[0]
         # ubx[1, -1] = goal[1]
-        # ubx[2, -1] = goal[2]
+        ubx[2, -1] = goal[2]
         ubx[3:, -1] = 0.
 
         lbx_ = ca.reshape(lbx, -1, 1)
@@ -399,6 +399,7 @@ if __name__ == '__main__':
         param = yaml.load(f)
 
     ut = UTurnMPC()
+    ut.reserve_footprint = True
     ut.set_parameters(param)
     # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
     cmpc = CasADi_MPC_TDROBCA()

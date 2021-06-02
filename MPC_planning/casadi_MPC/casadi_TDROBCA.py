@@ -174,7 +174,7 @@ class CasADi_MPC_TDROBCA:
             if i > 0:
                 sum_states_rate += ca.sumsqr(x_[:, i] - x_[:, i - 1])
 
-        obj = self.wg[6] * sum_states + self.wg[3] * sum_states_rate + 1e16 * self.wg[9] * sum_mindist \
+        obj = self.wg[6] * sum_states + self.wg[3] * sum_states_rate + 1e1 * self.wg[9] * sum_mindist \
               + 1e16 * self.wg[9] * ca.sumsqr(x_[:3, -1] - ref_path[:3, -1])
 
         return obj

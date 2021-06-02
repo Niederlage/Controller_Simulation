@@ -176,6 +176,9 @@ class CasADi_MPC_OBCA_PathOnly:
             lbg[6:6 + 2 * self.obst_num, i] = 0.
             ubg[6:6 + 2 * self.obst_num, i] = 1e-5
 
+            lbg[:self.ng + 2 * self.obst_num:self.ng + 3 * self.obst_num, i] = 0.
+            ubg[self.ng + 2 * self.obst_num:self.ng + 3 * self.obst_num, i] = 1e-3
+
             # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i
             lbg[self.ng + 2 * self.obst_num:self.ng + 3 * self.obst_num, i] = 0.
             ubg[self.ng + 2 * self.obst_num:self.ng + 3 * self.obst_num, i] = 1e-3
