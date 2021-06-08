@@ -93,22 +93,22 @@ class CasADi_MPC_WarmUp:
         ubg = ca.DM(self.ng, self.horizon - 1)
 
         for i in range(self.horizon - 1):
-            lbx[:self.obst_num, i] = -1e-5   # dist
+            lbx[:self.obst_num, i] = -1e-5  # dist
             lbx[self.obst_num:, i] = 0.  # lambda, mu
 
-            ubx[:self.obst_num, i] = 0. # dist
-            ubx[self.obst_num:, i] = 1e-2  # lambda, mu
+            ubx[:self.obst_num, i] = 0.  # dist
+            ubx[self.obst_num:, i] = 1.  # lambda, mu
+
+            # constraint1 rotT_i @ Aj.T @ lambdaj + GT @ mu_i == 0
+            lbg[:2 * self.obst_num, i] = 0.
+            ubg[:2 * self.obst_num, i] = 0.
 
             # # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i + d == 0
-            lbg[2 * self.obst_num:3 * self.obst_num, i] = 1e-10
-            ubg[2 * self.obst_num:3 * self.obst_num, i] = 1e-6
-
-            # # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i + d == 0
-            lbg[2 * self.obst_num:3 * self.obst_num, i] = 1e-10
-            ubg[2 * self.obst_num:3 * self.obst_num, i] = 1e-6
+            lbg[2 * self.obst_num:3 * self.obst_num, i] = 0.
+            ubg[2 * self.obst_num:3 * self.obst_num, i] = 0.
 
             # constraint3  norm_2(Aj.T @ lambdaj) <= 1
-            lbg[3 * self.obst_num:, i] = 1.
+            lbg[3 * self.obst_num:, i] = 0.
             ubg[3 * self.obst_num:, i] = 1.
 
         lbx_ = ca.reshape(lbx, -1, 1)
@@ -163,7 +163,7 @@ class CasADi_MPC_WarmUp:
         opts_setting = {"expand": True,
                         "ipopt.hessian_approximation": "limited-memory",
                         'ipopt.max_iter': 200,
-                        'ipopt.print_level': 0,
+                        'ipopt.print_level': 3,
                         'print_time': 0,
                         'ipopt.acceptable_tol': 1e-8,
                         'ipopt.acceptable_obj_change_tol': 1e-6}

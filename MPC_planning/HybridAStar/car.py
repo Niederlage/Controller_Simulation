@@ -18,7 +18,7 @@ class CarModel:
         self.W = 0.6  # width of car
         self.LF = 0.6  # distance from rear to vehicle front end
         self.LB = 0.2  # distance from rear to vehicle back end
-        self.MAX_STEER = 40 / 180 * np.pi  # [rad] maximum steering angle
+        self.MAX_STEER = 35 / 180 * np.pi  # [rad] maximum steering angle
         self.SAFE_FRONT = self.LF + 0.1
         self.SAFE_BACK = self.LB + 0.1
         self.SAFE_WIDTH = self.W + 0.1
@@ -61,7 +61,7 @@ class CarModel:
             if not self.rectangle_check(i_x, i_y, i_yaw,
                                         [ox[i] for i in ids], [oy[i] for i in ids]):
                 return False  # collision
-
+        # print("car collision happens")
         return True  # no collision
 
     # @jit
@@ -82,7 +82,7 @@ class CarModel:
                 ry > self.SAFE_WIDTH / 2.0 or
                 ry < -self.SAFE_WIDTH / 2.0):
             return False  # no collision
-
+        # print("rectangular collision happens")
         return True  # collision
 
     def plot_arrow(self, x, y, yaw, length=1.0, width=0.5, fc="r", ec="k"):

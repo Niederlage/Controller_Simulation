@@ -149,8 +149,7 @@ class CasADi_MPC_OBCA_PathOnly:
         obj = self.wg[2] * sum_states + self.wg[7] * sum_states_rate \
               + self.wg[3] * sum_controls + 1e1 * self.wg[9] * sum_controls_rate \
               + self.wg[2] * sum_dist_to_ref
-              # + self.wg[2] * ca.sumsqr(x[:3, -1] - ref_path[:3, -1]) \
-
+        # + self.wg[2] * ca.sumsqr(x[:3, -1] - ref_path[:3, -1]) \
 
         return obj
 
@@ -262,7 +261,7 @@ class CasADi_MPC_OBCA_PathOnly:
         nlp = {"x": X, "f": F, "g": G}
         opts_setting = {"expand": True,
                         "ipopt.hessian_approximation": "limited-memory",
-                        'ipopt.max_iter': 100,
+                        'ipopt.max_iter': 5000,
                         'ipopt.print_level': 3,
                         'print_time': 1,
                         'ipopt.acceptable_tol': 1e-8,
@@ -291,8 +290,8 @@ class CasADi_MPC_OBCA_PathOnly:
     def get_result_OBCA(self):
         cal_traj = ca.reshape(self.x_opt, self.nx + (self.obst_num + 1) * 4, self.horizon)
         op_trajectories = np.array(cal_traj[:4, :])
-        vl = np.array(cal_traj[4:16, :])
-        vm = np.array(cal_traj[16:, :])
+        vl = np.array(cal_traj[4:4 + self.obst_num * 4, :])
+        vm = np.array(cal_traj[4 + self.obst_num * 4:, :])
         return op_trajectories
 
 
@@ -306,12 +305,31 @@ if __name__ == '__main__':
     with open(address, 'r', encoding='utf-8') as f:
         param = yaml.load(f)
 
+
+    def initialize_saved_data():
+        loadtraj = np.load("../data/saved_hybrid_a_star.npz")
+        ref_traj = loadtraj["saved_traj"]
+        loadmap = np.load("../data/saved_obmap.npz", allow_pickle=True)
+        # ob1 = loadmap["pointmap"][0]
+        ob2 = loadmap["pointmap"][1]
+        # ob3 = loadmap["pointmap"][2]
+        # ob = [ob1, ob2, ob3]
+        ob = [ob2]
+        ob_constraint_mat = loadmap["constraint_mat"]
+        obst = []
+        # obst.append(ob_constraint_mat[:4, :])
+        obst.append(ob_constraint_mat[4:8, :])
+        # obst.append(ob_constraint_mat[8:12, :])
+
+        return ref_traj, ob, obst
+
+
     ut = UTurnMPC()
     ut.reserve_footprint = True
     ut.set_parameters(param)
     cmpc = CasADi_MPC_OBCA_PathOnly()
     cmpc.set_parameters(param)
-    ref_traj, ob, obst = ut.initialize_saved_data()
+    ref_traj, ob, obst = initialize_saved_data()
     shape = ut.get_car_shape()
 
     # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)

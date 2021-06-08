@@ -32,8 +32,11 @@ def hybrid_a_star_initialization(large):
     ob1 = loadmap["pointmap"][0]
     ob2 = loadmap["pointmap"][1]
     ob3 = loadmap["pointmap"][2]
-    obst_points = np.block([ob1.T, ob2.T, ob3.T])
+    bounds = coarse_planner.get_bounds()
+    obst_points = np.block([ob1.T, ob2.T, ob3.T, bounds])
     ob = [ob1, ob2, ob3]
+    # obst_points = np.block([ob2.T, bounds])
+    # ob = ob2
 
     ob_constraint_mat = loadmap["constraint_mat"]
     obst = []
@@ -51,7 +54,7 @@ def hybrid_a_star_initialization(large):
     else:
         saved_path = None
 
-    return saved_path, param, obst, ob
+    return saved_path, param, obst, ob, [ob1, ob2, ob3, bounds.T]
 
 
 def run_iterative_mpc(ref_traj, shape, obst):
@@ -100,6 +103,42 @@ def run_HOBCA_mpc(ref_traj, shape, obst):
     return op_dt, op_trajectories, op_controls
 
 
+def run_segment_OBCA_mpc(param, ref_traj, shape, obst):
+    s_half = int(len(ref_traj.T) / 2)
+    s_half2 = len(ref_traj.T) - s_half
+
+    op_trajectories = ref_traj[:, :s_half]
+    op_dist = np.zeros((len(obst), s_half))
+    op_lambda = np.zeros((4 * len(obst), s_half))
+    op_mu = np.zeros((4, s_half))
+
+    all_traj = []
+    for i in range(2):
+        warmup_time = time.time()
+        # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
+        if i > 0:
+            op_trajectories = ref_traj[:, s_half - 1:]
+            op_dist = np.zeros((len(obst), s_half2 + 1))
+            op_lambda = np.zeros((4 * len(obst), s_half2 + 1))
+            op_mu = np.zeros((4, s_half2 + 1))
+
+        obca = CasADi_MPC_TDROBCA()
+        obca.get_dt(ref_traj)
+        obca.set_parameters(param)
+        obca.op_lambda0 = op_lambda
+        obca.op_mu0 = op_mu
+        obca.op_d0 = op_dist
+        obca.init_model_OBCA(op_trajectories, shape, obst)
+        op_dt, op_trajectories, op_controls, op_lambda, op_mu = obca.get_result_OBCA()
+        all_traj.append([op_dt, op_trajectories, op_controls, op_lambda, op_mu])
+
+    dt_op = (all_traj[0][0] + all_traj[1][0]) / 2
+    traj_op = np.block([all_traj[0][1], all_traj[1][1]])
+    controls_op = np.block([all_traj[0][2], all_traj[1][2]])
+
+    return dt_op, traj_op, controls_op
+
+
 def run_TDROBCA_mpc(param, ref_traj, shape, obst):
     warmup_time = time.time()
     # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
@@ -110,6 +149,7 @@ def run_TDROBCA_mpc(param, ref_traj, shape, obst):
     print("warm up time:{:.3f}s".format(time.time() - warmup_time))
 
     obca = CasADi_MPC_TDROBCA()
+    obca.get_dt(ref_traj)
     obca.set_parameters(param)
     obca.op_lambda0 = op_lambda
     obca.op_mu0 = op_mu
@@ -123,9 +163,13 @@ def run_TDROBCA_mpc(param, ref_traj, shape, obst):
 def main():
     iterative_mpc = False
     HOBCA_mpc = False
+    try_segment = False
     large = True
 
-    ref_traj, param, obst, ob = hybrid_a_star_initialization(large)
+    ref_traj, param, obst, ob, ob_points = hybrid_a_star_initialization(large)
+
+    if len(ref_traj.T) > 500:
+        ref_traj = None
 
     if ref_traj is not None:
 
@@ -143,10 +187,13 @@ def main():
             op_dt, op_trajectories, op_controls = run_HOBCA_mpc(ref_traj, shape, obst)
 
         else:
-            op_dt, op_trajectories, op_controls = run_TDROBCA_mpc(param, ref_traj, shape, obst)
+            if try_segment:
+                op_dt, op_trajectories, op_controls = run_segment_OBCA_mpc(param, ref_traj, shape, obst)
+            else:
+                op_dt, op_trajectories, op_controls = run_TDROBCA_mpc(param, ref_traj, shape, obst)
 
         print("warm up OBCA total time:{:.3f}s".format(time.time() - start_time))
-        ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, ob, four_states=True)
+        ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, ob_points, four_states=True)
 
     else:
         print("Hybrid A Star initialization failed ....")

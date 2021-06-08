@@ -4,6 +4,7 @@ import time
 from mpc_motion_plot import UTurnMPC
 import yaml
 
+
 class CasADi_MPC_OBCA:
     def __init__(self):
         self.base = 0.4
@@ -194,9 +195,9 @@ class CasADi_MPC_OBCA:
 
         for i in range(self.horizon):
             lbx[0, i] = -10.  # x
-            ubx[0, i] = 10.  # x
-            lbx[1, i] = 1.  # y
-            ubx[1, i] = 10.  # 1.1y
+            ubx[0, i] = 20.  # x
+            lbx[1, i] = 0.  # y
+            ubx[1, i] = 15.  # 1.1y
             lbx[2, i] = -ca.pi  # th
             ubx[2, i] = ca.pi  # th
             lbx[3, i] = -self.v_max  # v
@@ -210,19 +211,19 @@ class CasADi_MPC_OBCA:
             lbx[7, i] = -self.jerk_max  # jerk
             ubx[7, i] = self.jerk_max  # jerk
 
-            lbx[8:, i] = 1e-8  # lambda, mu
-            ubx[8:, i] = 1  # lambda, mu
+            lbx[8:, i] = 0.  # lambda, mu
+            ubx[8:, i] = 1.  # lambda, mu
 
         # constraint1  rotT_i @ Aj.T @ lambdaj + GT @ mu_i == 0
         lbg[6:6 + 2 * self.obst_num, :] = 0.
-        ubg[6:6 + 2 * self.obst_num, :] = 1e-3  # 1e-5
+        ubg[6:6 + 2 * self.obst_num, :] = 0.  # 1e-5
 
         # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i
-        lbg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 1e-5
+        lbg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 0.
         ubg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 1e-5  # 1e-5
 
         # constraint3  norm_2(Aj.T @ lambdaj) == 1
-        lbg[6 + 3 * self.obst_num:6 + 4 * self.obst_num, :] = 1.
+        lbg[6 + 3 * self.obst_num:6 + 4 * self.obst_num, :] = 0.
         ubg[6 + 3 * self.obst_num:6 + 4 * self.obst_num, :] = 1.
 
         lbx[0, 0] = start[0]
@@ -248,7 +249,7 @@ class CasADi_MPC_OBCA:
         lbx_ = ca.reshape(lbx, -1, 1)
         ubx_ = ca.reshape(ubx, -1, 1)
         lbx_ = ca.vertcat(0.01, lbx_)
-        ubx_ = ca.vertcat(0.1, ubx_)
+        ubx_ = ca.vertcat(0.2, ubx_)
 
         lbg_ = ca.reshape(lbg, -1, 1)
         ubg_ = ca.reshape(ubg, -1, 1)
@@ -322,8 +323,8 @@ class CasADi_MPC_OBCA:
 
         nlp = {"x": X, "f": F, "g": G}
         opts_setting = {"expand": True,
-                        "ipopt.hessian_approximation": "exact",
-                        'ipopt.max_iter': 200,
+                        # "ipopt.hessian_approximation": "limited-memory",
+                        'ipopt.max_iter': 5000,
                         'ipopt.print_level': 3,
                         'print_time': 1,
                         'ipopt.acceptable_tol': 1e-8,
@@ -358,8 +359,8 @@ class CasADi_MPC_OBCA:
         op_controls = np.array(cal_traj[3:8, :])
         op_trajectories = np.array(cal_traj[:3, :])
 
-        vl = np.array(cal_traj[8:20, :])
-        vm = np.array(cal_traj[20:, :])
+        vl = np.array(cal_traj[8:8 + self.obst_num * 4, :])
+        vm = np.array(cal_traj[8 + self.obst_num * 4:, :])
         return op_dt, op_trajectories, op_controls, vl, vm
 
 
@@ -380,6 +381,24 @@ if __name__ == '__main__':
     # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
     cmpc = CasADi_MPC_OBCA()
     cmpc.set_parameters(param)
+
+    # def initialize_saved_data():
+    #     loadtraj = np.load("../data/saved_hybrid_a_star.npz")
+    #     ref_traj = loadtraj["saved_traj"]
+    #     loadmap = np.load("../data/saved_obmap.npz", allow_pickle=True)
+    #     # ob1 = loadmap["pointmap"][0]
+    #     ob2 = loadmap["pointmap"][1]
+    #     # ob3 = loadmap["pointmap"][2]
+    #     # ob = [ob1, ob2, ob3]
+    #     ob = [ob2]
+    #     ob_constraint_mat = loadmap["constraint_mat"]
+    #     obst = []
+    #     # obst.append(ob_constraint_mat[:4, :])
+    #     obst.append(ob_constraint_mat[4:8, :])
+    #     # obst.append(ob_constraint_mat[8:12, :])
+
+    # return ref_traj, ob, obst
+
     ref_traj, ob, obst = ut.initialize_saved_data()
     shape = ut.get_car_shape()
 

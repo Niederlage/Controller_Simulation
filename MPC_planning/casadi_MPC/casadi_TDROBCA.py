@@ -4,6 +4,7 @@ import time
 from mpc_motion_plot import UTurnMPC
 import yaml
 
+
 class CasADi_MPC_TDROBCA:
     def __init__(self):
         self.base = 2.0
@@ -174,8 +175,8 @@ class CasADi_MPC_TDROBCA:
             if i > 0:
                 sum_states_rate += ca.sumsqr(x_[:, i] - x_[:, i - 1])
 
-        obj = self.wg[6] * sum_states + self.wg[3] * sum_states_rate + 1e1 * self.wg[9] * sum_mindist \
-              + 1e16 * self.wg[9] * ca.sumsqr(x_[:3, -1] - ref_path[:3, -1])
+        obj = self.wg[6] * sum_states + self.wg[3] * sum_states_rate + 1e16 * self.wg[9] * sum_mindist \
+              # + 1e6 * self.wg[9] * ca.sumsqr(x_[:3, -1] - ref_path[:3, -1])
 
         return obj
 
@@ -187,9 +188,9 @@ class CasADi_MPC_TDROBCA:
 
         for i in range(self.horizon):
             lbx[0, i] = -10.  # x
-            ubx[0, i] = 10.  # x
-            lbx[1, i] = -1.  # y
-            ubx[1, i] = 10.  # 1.1y
+            ubx[0, i] = 20.  # x
+            lbx[1, i] = -10.  # y
+            ubx[1, i] = 20.  # 1.1y
             lbx[2, i] = -ca.pi  # th
             ubx[2, i] = ca.pi  # th
             lbx[3, i] = -self.v_max  # v
@@ -203,21 +204,21 @@ class CasADi_MPC_TDROBCA:
             lbx[7, i] = -self.jerk_max  # jerk
             ubx[7, i] = self.jerk_max  # jerk
 
-            lbx[8:-self.obst_num, i] = 1e-8  # lambda, mu
-            ubx[8:-self.obst_num, i] = 1.  # lambda, mu
+            lbx[8:-self.obst_num, i] = 1e-6  # lambda, mu
+            ubx[8:-self.obst_num, i] = 2.  # lambda, mu
             lbx[-self.obst_num:, i] = -1.  # dmin
-            ubx[-self.obst_num:, i] = -1e-7  # -4e-5  # dmin
+            ubx[-self.obst_num:, i] = -8e-4  # -4e-5  # dmin
 
         # constraint1 rotT_i @ Aj.T @ lambdaj + GT @ mu_i == 0
         lbg[6:6 + 2 * self.obst_num, :] = 0.
-        ubg[6:6 + 2 * self.obst_num, :] = 1e-5
+        ubg[6:6 + 2 * self.obst_num, :] = 1e-6
 
         # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i + dmin == 0
         lbg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 0.
-        ubg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 1e-3  # 1e-5
+        ubg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 0.  # 1e-5
 
         # constraint3  norm_2(Aj.T @ lambdaj) <=1
-        lbg[6 + 3 * self.obst_num:6 + 4 * self.obst_num, :] = 1.
+        lbg[6 + 3 * self.obst_num:6 + 4 * self.obst_num, :] = 0.
         ubg[6 + 3 * self.obst_num:6 + 4 * self.obst_num, :] = 1.
 
         lbx[0, 0] = start[0]
@@ -250,11 +251,13 @@ class CasADi_MPC_TDROBCA:
 
         return lbx_, ubx_, lbg_, ubg_
 
+    def get_dt(self, ref_path):
+        diff_s = np.diff(ref_path[:2, :], axis=1)
+        sum_s = np.sum(np.hypot(diff_s[0], diff_s[1]))
+        self.dt0 = 1.4 * (sum_s / self.v_max + self.v_max / self.a_max) / len(ref_path.T)
+
     def states_initialization(self, reference_path):
         x0 = ca.DM(self.nx, self.horizon)
-        diff_s = np.diff(reference_path[:2, :], axis=1)
-        sum_s = np.sum(np.hypot(diff_s[0], diff_s[1]))
-        self.dt0 = 1.4 * (sum_s / self.v_max + self.v_max / self.a_max) / self.horizon
 
         last_v = 0.
         last_a = 0.
@@ -320,7 +323,7 @@ class CasADi_MPC_TDROBCA:
         nlp = {"x": X, "f": F, "g": G}
         opts_setting = {"expand": False,
                         "ipopt.hessian_approximation": "exact",
-                        'ipopt.max_iter': 100,
+                        'ipopt.max_iter': 900,
                         'ipopt.print_level': 3,
                         'print_time': 1,
                         'ipopt.acceptable_tol': 1e-8,
@@ -356,9 +359,9 @@ class CasADi_MPC_TDROBCA:
         op_controls = np.array(cal_traj[3:8, :])
         op_trajectories = np.array(cal_traj[:3, :])
 
-        vl = np.array(cal_traj[8:20, :])
-        vm = np.array(cal_traj[20:24, :])
-        vd = np.array(cal_traj[24:, :])
+        vl = np.array(cal_traj[self.nx:self.nx + 4 * self.obst_num, :])
+        vm = np.array(cal_traj[self.nx + 4 * self.obst_num:self.nx + 4 * self.obst_num + 4, :])
+        vd = np.array(cal_traj[self.nx + 4 * self.obst_num + 4:, :])
 
         return op_dt, op_trajectories, op_controls, vl, vm
 

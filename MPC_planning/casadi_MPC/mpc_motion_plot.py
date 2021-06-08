@@ -135,7 +135,7 @@ class UTurnMPC():
                     plt.plot(ref_traj[0, 1:], ref_traj[1, 1:], "-", color="orange", label="warm start reference")
                 if obst is not None:
                     for obi in obst:
-                        plt.plot(obi[:, 0], obi[:, 1], color="black", label="obstacles")
+                        plt.plot(obi[:, 0], obi[:, 1], ".",color="black", label="obstacles")
 
                 ax.plot(self.predicted_trajectory[0, :], self.predicted_trajectory[1, :], "xg", label="MPC prediciton")
                 ax.plot(trajectory[:, 0], trajectory[:, 1], "-r")

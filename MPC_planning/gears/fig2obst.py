@@ -2,7 +2,6 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 
-
 def search_corner_downwards(edges, first_loc, xmax, ymax):
     search_up = edges[max(0, first_loc[0] - 1), first_loc[1]]
     search_down = edges[min(xmax, first_loc[0] + 1), first_loc[1]]
@@ -45,8 +44,12 @@ def search_corner_rightwards(edges, first_loc, xmax, ymax):
 
 def get_rough_coordinates(filename):
     img = cv2.imread(filename, 0)
-    edges = cv2.Canny(img, 80, 200)
-
+    # edges = cv2.Canny(img, 1, 200)
+    # dst = cv2.cornerHarris(img, 2, 3, 0.06)
+    # edges = np.zeros(img.shape)
+    # cv2.normalize(src=img, dst=edges, alpha=0, beta=255, norm_type=cv2.NORM_L2)
+    img[img != 0] = -1
+    edges = img + 1
     hmax = len(edges[0])
     wmax = len(edges[1])
 
@@ -76,7 +79,7 @@ def get_rough_coordinates(filename):
             continue
 
     edges_ = remove_identicals(edges_list)
-    edges_ = pixel2coordinates(edges_, 0.05, wmax, hmax)
+    # edges_ = pixel2coordinates(edges_, 1, wmax, hmax)
     return edges_
 
 
@@ -136,13 +139,14 @@ if __name__ == '__main__':
     file = "fig1.png"
     edges_list = get_rough_coordinates(file)
     print("size edge list:", len(edges_list))
-
+    img = cv2.imread(file, 0)
     fig = plt.figure()
+    plt.imshow(img, cmap='gray')
     if convert2coordinates:
         for edge in edges_list:
-            plt.plot(edge[0][0], edge[0][1], "bo")
-            plt.plot(edge[1][0], edge[1][1], "ro")
-            plt.plot(edge[2][0], edge[2][1], "go")
+            plt.plot(edge[0][1], edge[0][0], "bo")
+            plt.plot(edge[1][1], edge[1][0], "ro")
+            plt.plot(edge[2][1], edge[2][0], "go")
 
     plt.show()
 

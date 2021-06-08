@@ -137,7 +137,10 @@ class DynamicProgrammingHeuristic:
         min_y = round(min(oy))
         max_x = round(max(ox))
         max_y = round(max(oy))
-
+        print("min_x:", min_x)
+        print("min_y:", min_y)
+        print("max_x:", max_x)
+        print("max_y:", max_y)
         x_width = round(max_x - min_x)
         y_width = round(max_y - min_y)
 

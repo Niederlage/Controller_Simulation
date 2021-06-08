@@ -317,9 +317,6 @@ class ReedsSheppPathPlanning():
 
         return px, py, pyaw, directions
 
-    def pi_2_pi(self, angle):
-        return (angle + math.pi) % (2 * math.pi) - math.pi
-
     def calc_paths(self, sx, sy, syaw, gx, gy, gyaw, maxc, step_size):
         q0 = [sx, sy, syaw]
         q1 = [gx, gy, gyaw]

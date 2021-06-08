@@ -30,10 +30,10 @@ class CasADi_MPC_reference_line:
         self.a_max = 3.
         self.steer_rate_max = ca.pi * 60 / 180
         self.jerk_max = 3.
-        self.lateral_error_max = 0.5
+        self.lateral_error_max = 1
         self.heading_error_max = ca.pi * 40 / 180
         self.dmin = 0.
-        self.allowed_dist = 2
+        self.allowed_dist = 0.1
 
     def set_parameters(self, param):
         self.base = param["base"]

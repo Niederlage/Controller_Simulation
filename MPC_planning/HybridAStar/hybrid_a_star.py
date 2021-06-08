@@ -26,7 +26,7 @@ class HybridAStar:
         self.XY_GRID_RESOLUTION = 1  # [ m / grid]
         self.YAW_GRID_RESOLUTION = np.deg2rad(5.0)  # [rad/ grid]
         self.MOTION_RESOLUTION = 0.2  # [m/ grid] path interpolate resolution
-        self.N_STEER = 7  # number of steer command
+        self.N_STEER = 10  # number of steer command
         self.ROBOT_RADIUS = 1.0  # robot radius
 
         self.SB_COST = 5.0  # switch back penalty cost
@@ -321,13 +321,30 @@ class HybridAStar:
 
         return ind
 
+    def get_bounds(self):
+        pa = [-10, -10]
+        pb = [20, 20]
+
+        edge = np.mgrid[pa[0]:pb[0]:0.1, pa[1]:pb[1]:0.1]
+        lx = edge[0, :, 0].flatten()
+        ly = edge[0, :, 0].flatten()
+        x_ = np.ones((len(lx),))
+        y_ = np.ones((len(ly),))
+        horizon_l = np.vstack((lx, pa[1] * x_))[:, :edge.shape[1]]
+        horizon_u = np.vstack((lx, pb[1] * x_))[:, :edge.shape[1]]
+        vertical_l = np.vstack((pa[0] * y_, ly))[:, :edge.shape[2]]
+        vertical_u = np.vstack((pb[0] * y_, ly))[:, :edge.shape[2]]
+        return np.block([horizon_l, horizon_u, vertical_l, vertical_u])
+
     def generate_obmap(self, loadmap=False):
         if loadmap:
             load = np.load("../data/saved_obmap.npz", allow_pickle=True)
             v1 = load["pointmap"][0]
             v2 = load["pointmap"][1]
             v3 = load["pointmap"][2]
-            return np.block([v1.T, v2.T, v3.T])
+            # return np.block([v1.T, v2.T, v3.T])
+            bounds = self.get_bounds()
+            return np.block([v1.T, v2.T, v3.T, bounds])
         else:
             ox, oy = [], []
             for i in range(10):
@@ -387,6 +404,7 @@ class HybridAStar:
 
         print("start : ", start)
         print("goal : ", goal)
+        print("obst shape : ", obst.shape)
         return start, goal, obst
 
     def save_planned_path(self, path, planner, obst):
@@ -429,6 +447,7 @@ def main():
             plt.pause(0.0001)
 
     print(__file__ + " done!!")
+    plt.show()
 
 
 if __name__ == '__main__':
