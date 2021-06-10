@@ -20,6 +20,7 @@ class UTurnMPC():
         self.show_animation = True
         self.reserve_footprint = False
         self.plot_arrows = False
+        self.use_differ_motion = False
 
     def set_parameters(self, param):
         self.L = param["base"]
@@ -27,7 +28,7 @@ class UTurnMPC():
         self.LB = param["LB"]  # distance from rear to vehicle back end
         self.W = param["W"]
 
-    def motion_model(self, zst, u_in, dt, Runge_Kutta=True):
+    def ackermann_motion_model(self, zst, u_in, dt, Runge_Kutta=True):
         v_ = u_in[0]
         steer_ = u_in[1]
         x_ = zst[0]
@@ -74,6 +75,19 @@ class UTurnMPC():
 
             return np.array([x_, y_, yaw_])
 
+    def differ_motion_model(self, zst, u_in, dt, Runge_Kutta=True):
+        v_ = u_in[0]
+        omega_ = u_in[1]
+        x_ = zst[0]
+        y_ = zst[1]
+        yaw_ = zst[2]
+
+        x_ += v_ * np.cos(yaw_) * dt
+        y_ += v_ * np.sin(yaw_) * dt
+        yaw_ += omega_ * dt
+
+        return np.array([x_, y_, yaw_])
+
     def plot_arrow(self, x, y, yaw, length=1.5, width=0.5):  # pragma: no cover
         plt.arrow(x, y, length * np.cos(yaw), length * np.sin(yaw),
                   head_length=width, head_width=width)
@@ -118,7 +132,11 @@ class UTurnMPC():
         f = plt.figure()
         ax = plt.subplot()
         while True:
-            zst[:3] = self.motion_model(zst[:3], u_op[:, k], self.dt)  # simulate robot
+            if self.use_differ_motion:
+                zst[:3] = self.differ_motion_model(zst[:3], u_op[:, k], self.dt)  # simulate robot
+            else:
+                zst[:3] = self.ackermann_motion_model(zst[:3], u_op[:, k], self.dt)  # simulate robot
+
             trajectory = np.vstack((trajectory, zst))  # store state history
 
             if self.show_animation:
@@ -135,7 +153,7 @@ class UTurnMPC():
                     plt.plot(ref_traj[0, 1:], ref_traj[1, 1:], "-", color="orange", label="warm start reference")
                 if obst is not None:
                     for obi in obst:
-                        plt.plot(obi[:, 0], obi[:, 1], ".",color="black", label="obstacles")
+                        plt.plot(obi[:, 0], obi[:, 1], ".", color="black", label="obstacles")
 
                 ax.plot(self.predicted_trajectory[0, :], self.predicted_trajectory[1, :], "xg", label="MPC prediciton")
                 ax.plot(trajectory[:, 0], trajectory[:, 1], "-r")

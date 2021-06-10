@@ -160,14 +160,14 @@ class CasADi_MPC_OBCA_PathOnly:
         ubg = ca.DM(self.ng + 4 * self.obst_num, self.horizon - 1)
 
         for i in range(self.horizon - 1):
-            lbx[0, i] = -10.  # x
-            lbx[1, i] = -1.  # y
+            lbx[0, i] = -20.  # x
+            lbx[1, i] = -20.  # y
             lbx[2, i] = -ca.pi  # th
             lbx[3, i] = -self.steer_max  # steer
             lbx[4:, i] = 1e-10  # lambda, mu
 
-            ubx[0, i] = 10.  # x
-            ubx[1, i] = 10.  # y
+            ubx[0, i] = 20.  # x
+            ubx[1, i] = 20.  # y
             ubx[2, i] = ca.pi  # th
             ubx[3, i] = self.steer_max  # steer
             ubx[4:, i] = 1.  # lambda, mu
@@ -261,7 +261,7 @@ class CasADi_MPC_OBCA_PathOnly:
         nlp = {"x": X, "f": F, "g": G}
         opts_setting = {"expand": True,
                         "ipopt.hessian_approximation": "limited-memory",
-                        'ipopt.max_iter': 5000,
+                        'ipopt.max_iter': 500,
                         'ipopt.print_level': 3,
                         'print_time': 1,
                         'ipopt.acceptable_tol': 1e-8,
