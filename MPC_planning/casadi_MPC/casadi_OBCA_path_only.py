@@ -76,14 +76,14 @@ class CasADi_MPC_OBCA_PathOnly:
 
         return gx
 
-    def init_OBCA_constraints(self, x_, lambda_o, mu_o, shape, obst, gx):
+    def init_OBCA_constraints(self, x_, lambda_, mu_, shape, obst, gx):
         gT = self.Array2SX(shape[:, 2][:, None].T)
         GT = self.Array2SX(shape[:, :2].T)
 
-        lambda_v = ca.reshape(lambda_o, -1, 1)
-        lambda_ = ca.reshape(lambda_v, self.horizon, 4 * self.obst_num).T
-        mu_v = ca.reshape(mu_o, -1, 1)
-        mu_ = ca.reshape(mu_v, self.horizon, 4).T
+        # lambda_v = ca.reshape(lambda_o, -1, 1)
+        # lambda_ = ca.reshape(lambda_v, self.horizon, 4 * self.obst_num).T
+        # mu_v = ca.reshape(mu_o, -1, 1)
+        # mu_ = ca.reshape(mu_v, self.horizon, 4).T
 
         # G = ca.SX.zeros(4, 2)
         # G[0, 0] = 1
@@ -131,14 +131,12 @@ class CasADi_MPC_OBCA_PathOnly:
         return gx
 
     def init_objects(self, x, ref_path):
-        sum_states = 0
         sum_states_rate = 0
         sum_controls = 0
         sum_controls_rate = 0
         sum_dist_to_ref = 0
 
         for i in range(self.horizon - 1):
-            sum_states += ca.sumsqr(x[:3, i])  # xk
             sum_controls += ca.sumsqr(x[3:, i])  # uk
             sum_dist_to_ref += ca.sumsqr(x[:3, i] - ref_path[:3, i])
 
@@ -146,11 +144,10 @@ class CasADi_MPC_OBCA_PathOnly:
                 sum_states_rate += ca.sumsqr(x[:3, i] - x[:3, i - 1])  # xk - xk-1
                 sum_controls_rate += ca.sumsqr(x[3:, i] - x[3:, i - 1])  # uk - uk-1
 
-        obj = self.wg[2] * sum_states + self.wg[7] * sum_states_rate \
-              + self.wg[3] * sum_controls + 1e1 * self.wg[9] * sum_controls_rate \
-              + self.wg[2] * sum_dist_to_ref
-        # + self.wg[2] * ca.sumsqr(x[:3, -1] - ref_path[:3, -1]) \
-
+        obj = self.wg[2] * sum_states_rate \
+              + self.wg[7] * sum_controls + 1e1 * self.wg[6] * sum_controls_rate \
+              + self.wg[2] * sum_dist_to_ref + 1e6 * self.wg[9] * ca.sumsqr(x[:2, -1] - ref_path[:2, -1]) + 1e6 * \
+              self.wg[9] * ca.sumsqr(x[2, -1] - ref_path[2, -1])
         return obj
 
     def init_bounds_OBCA(self, start, goal):
@@ -172,18 +169,18 @@ class CasADi_MPC_OBCA_PathOnly:
             ubx[3, i] = self.steer_max  # steer
             ubx[4:, i] = 1.  # lambda, mu
 
-            lbg[6:6 + 2 * self.obst_num, i] = 0.
-            ubg[6:6 + 2 * self.obst_num, i] = 1e-5
+            ubg[:self.ng, i] = 1e-5
 
-            lbg[:self.ng + 2 * self.obst_num:self.ng + 3 * self.obst_num, i] = 0.
-            ubg[self.ng + 2 * self.obst_num:self.ng + 3 * self.obst_num, i] = 1e-3
+            # constraint1 rotT_i, Aj.T * lambdaj + GT * mu_i
+            lbg[self.ng: self.ng + 2 * self.obst_num, i] = -1e-5
+            ubg[self.ng: self.ng + 2 * self.obst_num, i] = 1e-5
 
             # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i
-            lbg[self.ng + 2 * self.obst_num:self.ng + 3 * self.obst_num, i] = 0.
-            ubg[self.ng + 2 * self.obst_num:self.ng + 3 * self.obst_num, i] = 1e-3
+            lbg[self.ng + 2 * self.obst_num:self.ng + 3 * self.obst_num, i] = 1e-4
+            ubg[self.ng + 2 * self.obst_num:self.ng + 3 * self.obst_num, i] = 1.
 
             # constraint3  norm_2(Aj.T @ lambdaj) - 1
-            lbg[self.ng + 3 * self.obst_num:self.ng + 4 * self.obst_num, i] = 1.
+            lbg[self.ng + 3 * self.obst_num:self.ng + 4 * self.obst_num, i] = 0.
             ubg[self.ng + 3 * self.obst_num:self.ng + 4 * self.obst_num, i] = 1.
 
         lbx[0, 0] = start[0]
@@ -196,15 +193,21 @@ class CasADi_MPC_OBCA_PathOnly:
         ubx[2, 0] = start[2]
         ubx[3:, 0] = 0.
 
-        lbx[0, -1] = goal[0]
-        lbx[1, -1] = goal[1]
-        lbx[2, -1] = goal[2]
-        lbx[3:, -1] = 0.
+        # lbx[0, -1] = goal[0]
+        # lbx[1, -1] = goal[1]
+        # lbx[2, -1] = goal[2] - 0.1
+        lbx[0, -1] = -20.
+        lbx[1, -1] = -20.
+        lbx[2, -1] = -ca.pi
+        # lbx[3:, -1] = 0.
 
-        ubx[0, -1] = goal[0]
-        ubx[1, -1] = goal[1]
-        ubx[2, -1] = goal[2]
-        ubx[3:, -1] = 0.
+        # ubx[0, -1] = goal[0]
+        # ubx[1, -1] = goal[1]
+        # ubx[2, -1] = goal[2] + 0.1
+        ubx[0, -1] = 20.
+        ubx[1, -1] = 20.
+        ubx[2, -1] = ca.pi
+        # ubx[3:, -1] = 0.
 
         lbx_ = ca.reshape(lbx, -1, 1)
         ubx_ = ca.reshape(ubx, -1, 1)
@@ -230,7 +233,7 @@ class CasADi_MPC_OBCA_PathOnly:
         return x0
 
     def dual_variables_initialization(self):
-        v0 = ca.DM.ones(4 * (self.obst_num + 1), self.horizon) * 1e-1
+        v0 = ca.DM.ones(4 * (self.obst_num + 1), self.horizon) * 1e-8
         return v0
 
     def init_model_OBCA(self, reference_path, shape_m, obst_m):
@@ -260,8 +263,8 @@ class CasADi_MPC_OBCA_PathOnly:
 
         nlp = {"x": X, "f": F, "g": G}
         opts_setting = {"expand": True,
-                        "ipopt.hessian_approximation": "limited-memory",
-                        'ipopt.max_iter': 500,
+                        "ipopt.hessian_approximation": "exact",
+                        'ipopt.max_iter': 200,
                         'ipopt.print_level': 3,
                         'print_time': 1,
                         'ipopt.acceptable_tol': 1e-8,
@@ -289,10 +292,11 @@ class CasADi_MPC_OBCA_PathOnly:
 
     def get_result_OBCA(self):
         cal_traj = ca.reshape(self.x_opt, self.nx + (self.obst_num + 1) * 4, self.horizon)
-        op_trajectories = np.array(cal_traj[:4, :])
+        op_trajectories = np.array(cal_traj[:3, :])
+        kappa = np.array(cal_traj[3, :])
         vl = np.array(cal_traj[4:4 + self.obst_num * 4, :])
         vm = np.array(cal_traj[4 + self.obst_num * 4:, :])
-        return op_trajectories
+        return op_trajectories, kappa, vl, vm
 
 
 if __name__ == '__main__':
@@ -310,16 +314,16 @@ if __name__ == '__main__':
         loadtraj = np.load("../data/saved_hybrid_a_star.npz")
         ref_traj = loadtraj["saved_traj"]
         loadmap = np.load("../data/saved_obmap.npz", allow_pickle=True)
-        # ob1 = loadmap["pointmap"][0]
+        ob1 = loadmap["pointmap"][0]
         ob2 = loadmap["pointmap"][1]
-        # ob3 = loadmap["pointmap"][2]
-        # ob = [ob1, ob2, ob3]
-        ob = [ob2]
+        ob3 = loadmap["pointmap"][2]
+        ob = [ob1, ob2, ob3]
+        # ob = [ob2]
         ob_constraint_mat = loadmap["constraint_mat"]
         obst = []
-        # obst.append(ob_constraint_mat[:4, :])
+        obst.append(ob_constraint_mat[:4, :])
         obst.append(ob_constraint_mat[4:8, :])
-        # obst.append(ob_constraint_mat[8:12, :])
+        obst.append(ob_constraint_mat[8:12, :])
 
         return ref_traj, ob, obst
 
@@ -334,6 +338,6 @@ if __name__ == '__main__':
 
     # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
     cmpc.init_model_OBCA(ref_traj, shape, obst)
-    op_trajectories = cmpc.get_result_OBCA()
+    op_trajectories, kappa, vl, vm = cmpc.get_result_OBCA()
     print("OBCA total time:{:.3f}s".format(time.time() - start_time))
     ut.plot_results_path_only(op_trajectories, ref_traj, ob)

@@ -3,6 +3,7 @@ import time
 import numpy as np
 import yaml
 from mpc_motion_plot import UTurnMPC
+from casadi_MPC.casadi_OBCA_path_only import CasADi_MPC_OBCA_PathOnly
 from casadi_MPC.casadi_OBCA_warmup import CasADi_MPC_WarmUp
 from casadi_MPC.casadi_OBCA import CasADi_MPC_OBCA
 from casadi_MPC.casadi_TDROBCA import CasADi_MPC_TDROBCA
@@ -141,6 +142,12 @@ def run_segment_OBCA_mpc(param, ref_traj, shape, obst):
 
 def run_TDROBCA_mpc(param, ref_traj, shape, obst):
     warmup_time = time.time()
+
+    # pathonly = CasADi_MPC_OBCA_PathOnly()
+    # pathonly.set_parameters(param)
+    # pathonly.init_model_OBCA(ref_path, shape, obst)
+    # ref_traj, kappa, vl, vm = pathonly.get_result_OBCA()
+
     # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
     warmup_qp = CasADi_MPC_WarmUp()
     warmup_qp.set_parameters(param)

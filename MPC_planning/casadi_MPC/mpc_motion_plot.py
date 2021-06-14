@@ -168,7 +168,8 @@ class UTurnMPC():
 
                 plt.axis("equal")
                 plt.grid(True)
-                plt.pause(0.01)
+                if k % 2 == 0:
+                    plt.pause(0.0001)
                 k += 1
 
             if k >= u_op.shape[1]:
@@ -253,7 +254,8 @@ class UTurnMPC():
 
                 plt.axis("equal")
                 plt.grid(True)
-                plt.pause(0.001)
+                if i % 10 == 0:
+                    plt.pause(0.0001)
                 i += 1
 
                 if i >= op_trajectories.shape[1]:
