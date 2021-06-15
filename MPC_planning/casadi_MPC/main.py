@@ -190,7 +190,7 @@ def main():
                     op_dt, op_trajectories, op_controls = run_TDROBCA_mpc(param, ref_traj, shape, obst)
 
             print("warm up OBCA total time:{:.3f}s".format(time.time() - start_time))
-            np.savez("smoothed_traj", dt=op_dt, traj=op_trajectories, control=op_controls, refpath=ref_traj)
+            np.savez("../data/smoothed_traj", dt=op_dt, traj=op_trajectories, control=op_controls, refpath=ref_traj)
 
             ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, ob_points, four_states=True)
 
@@ -198,7 +198,7 @@ def main():
             print("Hybrid A Star initialization failed ....")
 
     else:
-        loads = np.load("smoothed_traj.npz")
+        loads = np.load("../data/smoothed_traj.npz")
         op_dt = loads["dt"]
         op_trajectories = loads["traj"]
         op_controls = loads["control"]

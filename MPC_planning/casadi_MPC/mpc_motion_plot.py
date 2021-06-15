@@ -23,7 +23,7 @@ class UTurnMPC():
         self.reserve_footprint = False
         self.plot_arrows = False
         self.use_differ_motion = False
-        self.use_controller = True
+        self.use_controller = False
         self.ctrl = Controller()
         self.u_regelung = None
         # self.Km = self.ctrl.cal_mat_K(self.ctrl.x_s)
@@ -133,10 +133,9 @@ class UTurnMPC():
         ax.grid()
         ax.legend()
 
-    def plot_regelung(self, k):
-        if k == 0:
-            fig = plt.figure()
-        plt.cla()
+    def plot_regelung(self, fig, k):
+        if k > 0:
+            plt.close(fig)
         ax = plt.subplot(211)
         ax.plot(self.u_regelung[0, :k], label="delta_a", color="red")
         ax.grid()
@@ -170,6 +169,7 @@ class UTurnMPC():
         k = 0
         f = plt.figure()
         ax = plt.subplot()
+        ptr = None
         while True:
             u_in = u_op[:, k]
             if self.use_controller:
@@ -190,7 +190,7 @@ class UTurnMPC():
                     lambda event: [exit(0) if event.key == 'escape' else None])
 
                 if not self.reserve_footprint:
-                    plt.cla()
+                    plt.close(f)
                     self.plot_arrows = True
 
                 if ref_traj is not None:
@@ -212,9 +212,15 @@ class UTurnMPC():
 
                 plt.axis("equal")
                 plt.grid(True)
-                if k % 2 == 0:
+                if k % 1 == 0:
                     plt.pause(0.001)
-                self.plot_regelung(k)
+                # if k == 0:
+                #     fig = plt.figure()
+                #     ptr = fig
+                # else:
+                #     fig = ptr
+                # self.plot_regelung(fig, k)
+                aaaa = plt.get_figlabels()
                 k += 1
 
             if k >= u_op.shape[1]:
@@ -226,8 +232,8 @@ class UTurnMPC():
     def plot_results(self, op_dt, op_trajectories, op_controls, ref_traj, ob, four_states=False):
 
         self.predicted_trajectory = op_trajectories
-        # zst = ref_traj[:, 0]
-        zst = self.loc_start
+        zst = ref_traj[:, 0]
+        # zst = self.loc_start
         trajectory = np.copy(zst)
 
         self.cal_distance(op_trajectories[:2, :], len(ref_traj.T))
