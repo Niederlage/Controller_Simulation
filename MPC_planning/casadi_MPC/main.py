@@ -29,22 +29,7 @@ def hybrid_a_star_initialization(large):
     if large:
         coarse_planner.car.set_parameters(param)
 
-    loadmap = np.load("../data/saved_obmap.npz", allow_pickle=True)
-    ob1 = loadmap["pointmap"][0]
-    ob2 = loadmap["pointmap"][1]
-    ob3 = loadmap["pointmap"][2]
-    bounds = coarse_planner.get_bounds()
-    obst_points = np.block([ob1.T, ob2.T, ob3.T, bounds])
-    ob = [ob1, ob2, ob3]
-    # obst_points = np.block([ob2.T, bounds])
-    # ob = ob2
-
-    ob_constraint_mat = loadmap["constraint_mat"]
-    obst = []
-    obst.append(ob_constraint_mat[:4, :])
-    obst.append(ob_constraint_mat[4:8, :])
-    obst.append(ob_constraint_mat[8:12, :])
-
+    ob, obst, obst_points = get_all_obsts()
     path = coarse_planner.hybrid_a_star_planning(start, goal, obst_points)
 
     if path is not None:
@@ -55,36 +40,42 @@ def hybrid_a_star_initialization(large):
     else:
         saved_path = None
 
-    return saved_path, param, obst, ob, [ob1, ob2, ob3, bounds.T]
+    return saved_path, param, obst, ob
 
 
-def run_iterative_mpc(ref_traj, shape, obst):
-    op_trajectories = ref_traj
-    op_controls = np.zeros((5, len(ref_traj.T)))
-    op_dist = np.zeros((len(obst), len(ref_traj.T)))
-    op_lambda = np.zeros((4 * len(obst), len(ref_traj.T)))
-    op_mu = np.zeros((4, len(ref_traj.T)))
-    op_dt = 0.1
+def get_bounds():
+    pa = [-10, -10]
+    pb = [20, 20]
 
-    for i in range(5):
-        warmup_time = time.time()
-        # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
-        warmup_qp = CasADi_MPC_WarmUp()
-        warmup_qp.op_dist0 = op_dist
-        warmup_qp.op_lambda0 = op_lambda
-        warmup_qp.op_mu0 = op_mu
-        warmup_qp.init_model_warmup(op_trajectories, shape, obst)
-        op_dist, op_lambda, op_mu = warmup_qp.get_result_warmup()
-        print("warm up time:{:.3f}s".format(time.time() - warmup_time))
+    edge = np.mgrid[pa[0]:pb[0]:0.1, pa[1]:pb[1]:0.1]
+    lx = edge[0, :, 0].flatten()
+    ly = edge[0, :, 0].flatten()
+    x_ = np.ones((len(lx),))
+    y_ = np.ones((len(ly),))
+    horizon_l = np.vstack((lx, pa[1] * x_))[:, :edge.shape[1]]
+    horizon_u = np.vstack((lx, pb[1] * x_))[:, :edge.shape[1]]
+    vertical_l = np.vstack((pa[0] * y_, ly))[:, :edge.shape[2]]
+    vertical_u = np.vstack((pb[0] * y_, ly))[:, :edge.shape[2]]
+    return np.block([horizon_l, horizon_u, vertical_l, vertical_u])
 
-        obca = CasADi_MPC_OBCA()
-        obca.op_lambda0 = op_lambda
-        obca.op_mu0 = op_mu
-        obca.init_model_OBCA(op_trajectories, shape, obst)
-        op_dt, op_trajectories, op_controls, op_lambda, op_mu = obca.get_result_OBCA()
-        obca.op_control0 = op_controls
 
-    return op_dt, op_trajectories, op_controls
+def get_all_obsts():
+    loadmap = np.load("../data/saved_obmap.npz", allow_pickle=True)
+    ob1 = loadmap["pointmap"][0]
+    ob2 = loadmap["pointmap"][1]
+    ob3 = loadmap["pointmap"][2]
+    bounds = get_bounds()
+    obst_points = np.block([ob1.T, ob2.T, ob3.T, bounds])
+    ob = [ob1, ob2, ob3, bounds.T]
+    # obst_points = np.block([ob2.T, bounds])
+    # ob = ob2
+
+    ob_constraint_mat = loadmap["constraint_mat"]
+    obst = []
+    obst.append(ob_constraint_mat[:4, :])
+    obst.append(ob_constraint_mat[4:8, :])
+    obst.append(ob_constraint_mat[8:12, :])
+    return ob, obst, obst_points
 
 
 def run_HOBCA_mpc(ref_traj, shape, obst):
@@ -168,42 +159,59 @@ def run_TDROBCA_mpc(param, ref_traj, shape, obst):
 
 
 def main():
-    iterative_mpc = False
+    address = "../config_OBCA_large.yaml"
     HOBCA_mpc = False
     try_segment = False
+    load_file = True
     large = True
 
-    ref_traj, param, obst, ob, ob_points = hybrid_a_star_initialization(large)
+    if not load_file:
+        ref_traj, param, obst, ob_points = hybrid_a_star_initialization(large)
 
-    if len(ref_traj.T) > 500:
-        ref_traj = None
+        if len(ref_traj.T) > 500:
+            ref_traj = None
 
-    if ref_traj is not None:
+        if ref_traj is not None:
 
-        ut = UTurnMPC()
-        ut.set_parameters(param)
-        ut.reserve_footprint = True
-        shape = ut.get_car_shape()
+            ut = UTurnMPC()
+            ut.set_parameters(param)
+            ut.reserve_footprint = True
+            shape = ut.get_car_shape()
 
-        start_time = time.time()
+            start_time = time.time()
 
-        if iterative_mpc:
-            op_dt, op_trajectories, op_controls = run_iterative_mpc(ref_traj, shape, obst)
+            if HOBCA_mpc:
+                op_dt, op_trajectories, op_controls = run_HOBCA_mpc(ref_traj, shape, obst)
 
-        elif HOBCA_mpc:
-            op_dt, op_trajectories, op_controls = run_HOBCA_mpc(ref_traj, shape, obst)
+            else:
+                if try_segment:
+                    op_dt, op_trajectories, op_controls = run_segment_OBCA_mpc(param, ref_traj, shape, obst)
+                else:
+                    op_dt, op_trajectories, op_controls = run_TDROBCA_mpc(param, ref_traj, shape, obst)
+
+            print("warm up OBCA total time:{:.3f}s".format(time.time() - start_time))
+            np.savez("smoothed_traj", dt=op_dt, traj=op_trajectories, control=op_controls, refpath=ref_traj)
+
+            ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, ob_points, four_states=True)
 
         else:
-            if try_segment:
-                op_dt, op_trajectories, op_controls = run_segment_OBCA_mpc(param, ref_traj, shape, obst)
-            else:
-                op_dt, op_trajectories, op_controls = run_TDROBCA_mpc(param, ref_traj, shape, obst)
-
-        print("warm up OBCA total time:{:.3f}s".format(time.time() - start_time))
-        ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, ob_points, four_states=True)
+            print("Hybrid A Star initialization failed ....")
 
     else:
-        print("Hybrid A Star initialization failed ....")
+        loads = np.load("smoothed_traj.npz")
+        op_dt = loads["dt"]
+        op_trajectories = loads["traj"]
+        op_controls = loads["control"]
+        ref_traj = loads["refpath"]
+
+        print("load file to check!")
+        ut = UTurnMPC()
+        with open(address, 'r', encoding='utf-8') as f:
+            param = yaml.load(f)
+        ob_points, obst, ob_array = get_all_obsts()
+        ut.set_parameters(param)
+        ut.reserve_footprint = True
+        ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, ob_points, four_states=True)
 
 
 if __name__ == '__main__':

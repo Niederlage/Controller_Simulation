@@ -236,14 +236,17 @@ class CasADi_MPC_OBCA:
         ubx[2, 0] = start[2]
         ubx[3:, 0] = 0.
 
-        lbx[0, -1] = goal[0]
-        lbx[1, -1] = goal[1]
-        lbx[2, -1] = goal[2]
+        lbx[0, -1] = -20.
+        lbx[1, -1] = -20.
+        lbx[2, -1] = -ca.pi
         lbx[3:, -1] = 0.
 
-        ubx[0, -1] = goal[0]
-        ubx[1, -1] = goal[1]
-        ubx[2, -1] = goal[2]
+        # ubx[0, -1] = goal[0]
+        # ubx[1, -1] = goal[1]
+        # ubx[2, -1] = goal[2] + 0.1
+        ubx[0, -1] = 20.
+        ubx[1, -1] = 20.
+        ubx[2, -1] = ca.pi
         ubx[3:, -1] = 0.
 
         lbx_ = ca.reshape(lbx, -1, 1)
@@ -260,7 +263,7 @@ class CasADi_MPC_OBCA:
         x0 = ca.DM(self.nx, self.horizon)
         diff_s = np.diff(reference_path[:2, :], axis=1)
         sum_s = np.sum(np.hypot(diff_s[0], diff_s[1]))
-        self.dt0 = 1.2 * (sum_s / self.v_max + self.v_max / self.a_max) / self.horizon
+        self.dt0 = 1.3 * (sum_s / self.v_max + self.v_max / self.a_max) / self.horizon
         last_v = 0.
         last_a = 0.
         last_steer = 0.
@@ -324,7 +327,7 @@ class CasADi_MPC_OBCA:
         nlp = {"x": X, "f": F, "g": G}
         opts_setting = {"expand": True,
                         # "ipopt.hessian_approximation": "limited-memory",
-                        'ipopt.max_iter': 5000,
+                        'ipopt.max_iter': 500,
                         'ipopt.print_level': 3,
                         'print_time': 1,
                         'ipopt.acceptable_tol': 1e-8,

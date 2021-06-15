@@ -175,7 +175,7 @@ class CasADi_MPC_TDROBCA:
             if i > 0:
                 sum_states_rate += ca.sumsqr(x_[:, i] - x_[:, i - 1])
 
-        obj = self.wg[3] * sum_states_rate + 1e6 * self.wg[9] * sum_mindist + 1e8 * self.wg[9] * ca.sumsqr(
+        obj = 1e2 * self.wg[9] * sum_states_rate + 1e26 * self.wg[9] * sum_mindist + 1e6 * self.wg[9] * ca.sumsqr(
             x_[:2, -1] - ref_path[:2, -1]) + 1e6 * self.wg[9] * ca.sumsqr(x_[2, -1] - ref_path[2, -1])
         return obj
 
@@ -328,7 +328,7 @@ class CasADi_MPC_TDROBCA:
         nlp = {"x": X, "f": F, "g": G}
         opts_setting = {"expand": False,
                         "ipopt.hessian_approximation": "exact",
-                        'ipopt.max_iter': 900,
+                        'ipopt.max_iter': 200,
                         'ipopt.print_level': 3,
                         'print_time': 1,
                         'ipopt.acceptable_tol': 1e-8,

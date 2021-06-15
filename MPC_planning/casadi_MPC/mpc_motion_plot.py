@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 plt.switch_backend('TkAgg')
 import numpy as np
 from gears.polygon_generator import cal_coeff_mat
+from gears.Controller import Controller
 
 
 class UTurnMPC():
@@ -15,12 +16,17 @@ class UTurnMPC():
         self.W = 0.6  # width of car
         self.LF = 0.6  # distance from rear to vehicle front end
         self.LB = 0.2  # distance from rear to vehicle back end
+        self.loc_start = np.array([-2.5, -1., np.deg2rad(70)])
         self.predicted_trajectory = None
         self.optimal_dt = None
         self.show_animation = True
         self.reserve_footprint = False
         self.plot_arrows = False
         self.use_differ_motion = False
+        self.use_controller = True
+        self.ctrl = Controller()
+        self.u_regelung = None
+        # self.Km = self.ctrl.cal_mat_K(self.ctrl.x_s)
 
     def set_parameters(self, param):
         self.L = param["base"]
@@ -43,26 +49,26 @@ class UTurnMPC():
         else:
             a_ = u_in[2]
             steer_rate_ = u_in[3]
-            jerk_ = u_in[4]
+            # jerk_ = u_in[4]
 
             k1_dx = v_ * np.cos(yaw_)
             k1_dy = v_ * np.sin(yaw_)
             k1_dyaw = v_ / self.L * np.tan(steer_)
             k1_dv = a_
             k1_dsteer = steer_rate_
-            k1_da = jerk_
+            # k1_da = jerk_
 
             k2_dx = (v_ + 0.5 * dt * k1_dv) * np.cos(yaw_ + 0.5 * dt * k1_dyaw)
             k2_dy = (v_ + 0.5 * dt * k1_dv) * np.sin(yaw_ + 0.5 * dt * k1_dyaw)
             k2_dyaw = (v_ + 0.5 * dt * k1_dv) / self.L * np.tan(steer_ + 0.5 * dt * k1_dsteer)
-            k2_dv = a_ + 0.5 * dt * k1_da
+            k2_dv = a_  # + 0.5 * dt * k1_da
             k2_dsteer = steer_rate_
-            k2_da = jerk_
+            # k2_da = jerk_
 
             k3_dx = (v_ + 0.5 * dt * k2_dv) * np.cos(yaw_ + 0.5 * dt * k2_dyaw)
             k3_dy = (v_ + 0.5 * dt * k2_dv) * np.sin(yaw_ + 0.5 * dt * k2_dyaw)
             k3_dyaw = (v_ + 0.5 * dt * k2_dv) / self.L * np.tan(steer_ + 0.5 * dt * k2_dsteer)
-            k3_dv = a_ + 0.5 * dt * k2_da
+            k3_dv = a_  # + 0.5 * dt * k2_da
             k3_dsteer = steer_rate_
 
             k4_dx = (v_ + 0.5 * dt * k3_dv) * np.cos(yaw_ + 0.5 * dt * k3_dyaw)
@@ -127,15 +133,53 @@ class UTurnMPC():
         ax.grid()
         ax.legend()
 
+    def plot_regelung(self, k):
+        if k == 0:
+            fig = plt.figure()
+        plt.cla()
+        ax = plt.subplot(211)
+        ax.plot(self.u_regelung[0, :k], label="delta_a", color="red")
+        ax.grid()
+        ax.set_title("delta_a")
+        # ax.legend()
+
+        ax = plt.subplot(212)
+        ax.plot(self.u_regelung[1, :k] * 180 / np.pi, label="delta_steer")
+        ax.set_title("delta_steer")
+        ax.grid()
+
+        plt.pause(0.001)
+
+    def lqr_regler(self, zst, u_in, k):
+        if k == 0:
+            state = np.block([zst, u_in[:2, k]])
+        else:
+            state = np.block([zst, u_in[:2, k]])
+
+        ref_state = np.block([self.predicted_trajectory[:3, k], u_in[:2, k]])
+        u_regelung = -self.ctrl.cal_mat_K(self.ctrl.x_s, self.dt) @ (state - ref_state)
+
+        if abs(u_regelung[0]) > 4:
+            u_regelung[0] = np.sign(u_regelung[0]) * 4
+        if abs(u_regelung[1]) > 40 * np.pi / 180:
+            u_regelung[1] = np.sign(u_regelung[1]) * 40 * np.pi / 180
+        self.u_regelung[:, k] = u_regelung
+        return u_regelung
+
     def try_tracking(self, zst, u_op, trajectory, obst=None, ref_traj=None):
         k = 0
         f = plt.figure()
         ax = plt.subplot()
         while True:
+            u_in = u_op[:, k]
+            if self.use_controller:
+                u_regelung = self.lqr_regler(zst, u_op, k)
+                u_in[2:4] += u_regelung
+
             if self.use_differ_motion:
-                zst[:3] = self.differ_motion_model(zst[:3], u_op[:, k], self.dt)  # simulate robot
+                zst = self.differ_motion_model(zst, u_in, self.dt)  # simulate robot
             else:
-                zst[:3] = self.ackermann_motion_model(zst[:3], u_op[:, k], self.dt)  # simulate robot
+                zst = self.ackermann_motion_model(zst, u_in, self.dt)  # simulate robot
 
             trajectory = np.vstack((trajectory, zst))  # store state history
 
@@ -169,7 +213,8 @@ class UTurnMPC():
                 plt.axis("equal")
                 plt.grid(True)
                 if k % 2 == 0:
-                    plt.pause(0.0001)
+                    plt.pause(0.001)
+                self.plot_regelung(k)
                 k += 1
 
             if k >= u_op.shape[1]:
@@ -181,13 +226,15 @@ class UTurnMPC():
     def plot_results(self, op_dt, op_trajectories, op_controls, ref_traj, ob, four_states=False):
 
         self.predicted_trajectory = op_trajectories
-        zst = ref_traj[:, 0]
+        # zst = ref_traj[:, 0]
+        zst = self.loc_start
         trajectory = np.copy(zst)
 
         self.cal_distance(op_trajectories[:2, :], len(ref_traj.T))
         self.dt = op_dt
         print("Time resolution:{:.3f}s, total time:{:.3f}s".format(self.dt, self.dt * len(ref_traj.T)))
-
+        if self.use_controller:
+            self.u_regelung = np.zeros((2, len(ref_traj.T)))
         yaw_ = op_trajectories[2, :]
         yaw_rate = np.diff(yaw_) / op_dt
         yaw_rate_ = np.append(0., yaw_rate)
@@ -219,7 +266,7 @@ class UTurnMPC():
         fig = plt.figure()
         ax = plt.subplot(111)
         ax.plot(op_trajectories[2, :] * 180 / np.pi, label="yaw/grad")
-        ax.plot(op_trajectories[3, :] * 180 / np.pi, label="steer/grad")
+        # ax.plot(op_trajectories[3, :] * 180 / np.pi, label="steer/grad")
         ax.grid()
         ax.legend()
 
@@ -254,7 +301,7 @@ class UTurnMPC():
 
                 plt.axis("equal")
                 plt.grid(True)
-                if i % 10 == 0:
+                if i % 5 == 0:
                     plt.pause(0.0001)
                 i += 1
 
