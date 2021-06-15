@@ -190,7 +190,7 @@ class UTurnMPC():
                     lambda event: [exit(0) if event.key == 'escape' else None])
 
                 if not self.reserve_footprint:
-                    plt.close(f)
+                    plt.cla()
                     self.plot_arrows = True
 
                 if ref_traj is not None:
@@ -324,9 +324,9 @@ class UTurnMPC():
         print("total covered distance:{:.3f}m".format(sum_s))
 
     def initialize_saved_data(self):
-        loadtraj = np.load("../data/saved_hybrid_a_star.npz")
+        loadtraj = np.load("../../data/saved_hybrid_a_star.npz")
         ref_traj = loadtraj["saved_traj"]
-        loadmap = np.load("../data/saved_obmap.npz", allow_pickle=True)
+        loadmap = np.load("../../data/saved_obmap.npz", allow_pickle=True)
         ob1 = loadmap["pointmap"][0]
         ob2 = loadmap["pointmap"][1]
         ob3 = loadmap["pointmap"][2]

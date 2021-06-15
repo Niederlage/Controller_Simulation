@@ -311,9 +311,9 @@ if __name__ == '__main__':
 
 
     def initialize_saved_data():
-        loadtraj = np.load("../data/saved_hybrid_a_star.npz")
+        loadtraj = np.load("../../data/saved_hybrid_a_star.npz")
         ref_traj = loadtraj["saved_traj"]
-        loadmap = np.load("../data/saved_obmap.npz", allow_pickle=True)
+        loadmap = np.load("../../data/saved_obmap.npz", allow_pickle=True)
         ob1 = loadmap["pointmap"][0]
         ob2 = loadmap["pointmap"][1]
         ob3 = loadmap["pointmap"][2]

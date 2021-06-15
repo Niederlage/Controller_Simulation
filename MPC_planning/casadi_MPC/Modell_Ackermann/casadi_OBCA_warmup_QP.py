@@ -41,10 +41,6 @@ class CasADi_MPC_WarmUp:
     def init_warmup_constraints(self, x0, d_, lambda_, mu_, shape, obst, gx):
         gT = self.Array2SX(shape[:, 2][:, None].T)
         GT = self.Array2SX(shape[:, :2].T)
-        lambda_v = ca.reshape(lambda_, -1, 1)
-        lambda_ = ca.reshape(lambda_v, self.horizon, 4 * self.obst_num).T
-        mu_v = ca.reshape(mu_, -1, 1)
-        mu_ = ca.reshape(mu_v, self.horizon, 4).T
 
         l_ob = len(obst)
         for i in range(self.horizon - 1):
@@ -65,26 +61,31 @@ class CasADi_MPC_WarmUp:
                 Aj = self.Array2SX(obst[j][:, :2])
                 bj = self.Array2SX(obst[j][:, 2][:, None])
                 lambdaj = lambda_[(4 * j):(4 * (j + 1)), i]
-
                 constraint1 = rotT_i @ Aj.T @ lambdaj + GT @ mu_i
                 constraint2 = (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i + d_[j, i]
-                temp = Aj.T @ lambdaj
-                constraint3 = ca.sumsqr(temp)
+                # temp = Aj.T @ lambdaj
+                # constraint3 = ca.sumsqr(temp)
 
                 gx[j, i] = constraint1[0, 0]
                 gx[j + l_ob, i] = constraint1[1, 0]
                 gx[j + 2 * l_ob, i] = constraint2
-                gx[j + 3 * l_ob, i] = constraint3
+                # gx[j + 3 * l_ob, i] = constraint3
 
         return gx
 
-    def init_objects_warmup(self, d_):
+    def init_objects_warmup(self, lambda_, d_, obst):
         sum_total_dist = 0
-        for i in range(self.horizon - 1):
+        sum_Alambda = 0
+        for i in range(self.horizon):
             for j in range(self.obst_num):
                 sum_total_dist += ca.power(d_[j, i], 2)
 
-        return sum_total_dist
+                Aj = self.Array2SX(obst[j][:, :2])
+                lambdaj = lambda_[(4 * j):(4 * (j + 1)), i]
+                temp = Aj.T @ lambdaj
+                sum_Alambda += ca.sumsqr(temp)
+
+        return sum_total_dist + self.wg[1] * sum_Alambda
 
     def init_bounds_warmup(self):
         lbx = ca.DM(self.obst_num + (self.obst_num + 1) * 4, self.horizon)
@@ -97,19 +98,19 @@ class CasADi_MPC_WarmUp:
             lbx[self.obst_num:, i] = 0.  # lambda, mu
 
             ubx[:self.obst_num, i] = 0.  # dist
-            ubx[self.obst_num:, i] = 1.  # lambda, mu
-
-            # constraint1 rotT_i @ Aj.T @ lambdaj + GT @ mu_i == 0
-            lbg[:2 * self.obst_num, i] = 0.
-            ubg[:2 * self.obst_num, i] = 0.
+            ubx[self.obst_num:, i] = 1e-2  # lambda, mu
 
             # # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i + d == 0
-            lbg[2 * self.obst_num:3 * self.obst_num, i] = 0.
-            ubg[2 * self.obst_num:3 * self.obst_num, i] = 0.
+            lbg[2 * self.obst_num:3 * self.obst_num, i] = 1e-10
+            ubg[2 * self.obst_num:3 * self.obst_num, i] = 1e-6
 
-            # constraint3  norm_2(Aj.T @ lambdaj) <= 1
-            lbg[3 * self.obst_num:, i] = 0.
-            ubg[3 * self.obst_num:, i] = 1.
+            # # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i + d == 0
+            lbg[2 * self.obst_num:3 * self.obst_num, i] = 1e-10
+            ubg[2 * self.obst_num:3 * self.obst_num, i] = 1e-6
+
+            # # constraint3  norm_2(Aj.T @ lambdaj) <= 1
+            # lbg[3 * self.obst_num:, i] = 1.
+            # ubg[3 * self.obst_num:, i] = 1.
 
         lbx_ = ca.reshape(lbx, -1, 1)
         ubx_ = ca.reshape(ubx, -1, 1)
@@ -140,7 +141,8 @@ class CasADi_MPC_WarmUp:
     def init_model_warmup(self, reference_path, shape_m, obst_m):
         self.horizon = reference_path.shape[1]
         self.obst_num = len(obst_m)
-        self.ng = 4 * len(obst_m)
+        self.ng = 3 * len(obst_m)
+
         # initialize variables
         d_ = ca.SX.sym("d", self.obst_num, self.horizon)  # dist
         lambda_ = ca.SX.sym("l", 4 * self.obst_num, self.horizon)
@@ -157,13 +159,13 @@ class CasADi_MPC_WarmUp:
         X0, XL, XU, GL, GU = self.organize_bounds(v0)
 
         # initialize objectives
-        F = self.init_objects_warmup(d_)
+        F = self.init_objects_warmup(lambda_, d_, obst_m)
 
         qp = {"x": X, "f": F, "g": G}
         opts_setting = {"expand": True,
                         "ipopt.hessian_approximation": "limited-memory",
                         'ipopt.max_iter': 200,
-                        'ipopt.print_level': 3,
+                        'ipopt.print_level': 0,
                         'print_time': 0,
                         'ipopt.acceptable_tol': 1e-8,
                         'ipopt.acceptable_obj_change_tol': 1e-6}
@@ -203,5 +205,5 @@ if __name__ == '__main__':
     cmpc = CasADi_MPC_WarmUp()
     cmpc.init_model_warmup(ref_traj, shape, obst)
     op_dist, op_lambda, op_mu = cmpc.get_result_warmup()
-    np.savez("../data/saved_OBCA_warmup.npz", op_d=op_dist, op_lambda=op_lambda, op_mu=op_mu)
+    np.savez("../../data/saved_OBCA_warmup.npz", op_d=op_dist, op_lambda=op_lambda, op_mu=op_mu)
     print("optimal warm-up successful!")

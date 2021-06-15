@@ -5,7 +5,7 @@ W: 2.0
 
 start:
   - -2.  # x end   - -7.5  # x end
-  - -1.5 # y end - 7.5 # y end
+  - -2.5 # y end - 7.5 # y end
   - 90. # theta end - 0. # theta end
 goal: # goal with angle
   - 7.5  # x end - -0.8  # x end

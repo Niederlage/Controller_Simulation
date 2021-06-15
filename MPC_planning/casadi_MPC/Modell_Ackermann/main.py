@@ -3,10 +3,9 @@ import time
 import numpy as np
 import yaml
 from mpc_motion_plot import UTurnMPC
-from casadi_MPC.casadi_OBCA_path_only import CasADi_MPC_OBCA_PathOnly
-from casadi_MPC.casadi_OBCA_warmup import CasADi_MPC_WarmUp
-from casadi_MPC.casadi_OBCA import CasADi_MPC_OBCA
-from casadi_MPC.casadi_TDROBCA import CasADi_MPC_TDROBCA
+from Modell_Ackermann.casadi_OBCA_warmup import CasADi_MPC_WarmUp
+from Modell_Ackermann.casadi_OBCA import CasADi_MPC_OBCA
+from Modell_Ackermann.casadi_TDROBCA import CasADi_MPC_TDROBCA
 # from casadi_MPC.casadi_TDROBCA_v2 import CasADi_MPC_TDROBCA
 # from casadi_MPC.casadi_TDROBCA_v3 import CasADi_MPC_TDROBCA
 from MPC_planning.HybridAStar.hybrid_a_star import HybridAStar
@@ -162,7 +161,7 @@ def main():
     address = "../config_OBCA_large.yaml"
     HOBCA_mpc = False
     try_segment = False
-    load_file = True
+    load_file = False
     large = True
 
     if not load_file:
