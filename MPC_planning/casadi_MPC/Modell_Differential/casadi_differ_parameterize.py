@@ -1,6 +1,7 @@
 import casadi as ca
 import numpy as np
 import time
+from gears.curve_fitting import Curve_Fitting
 from mpc_motion_plot import UTurnMPC
 import yaml
 
@@ -12,8 +13,8 @@ class CasADi_MPC_differ:
         self.LB = 1.
         self.offset = (self.LF - self.LB) / 2
 
-        self.nx = 8 + 1
-        self.ng = 6 + 1
+        self.nx = 10
+        self.ng = 8
         self.obst_num = 0
         self.horizon = 0
         self.dt0 = 0.1
@@ -32,14 +33,14 @@ class CasADi_MPC_differ:
         self.lateral_error_max = 0.5
         self.heading_error_max = ca.pi * 40 / 180
         self.dmin = 0.
-        self.centripetal = 0.
+        self.centripetal = 0.8
 
         self.v0 = 1.
         self.omega0 = 0.1
-        self.v_end = 1.5
+        self.v_end = 2.
         self.omega_end = 0.5
 
-    def init_dynamic_constraints_cxcy(self, cx, cy, x, dt, x0):
+    def init_dynamic_constraints_cxcy(self, cx, cy, x, dt):
         g1 = ca.SX.sym("g1", self.ng, self.horizon - 1)
         s = 0.
         # states: x, y, yaw, v, omega, a, omega_rate, jerk, lateral_error, heading_error
@@ -54,9 +55,6 @@ class CasADi_MPC_differ:
             jerk_ = x[7, i]
             e_y = x[8, i]
             e_th = x[9, i]
-
-            kappa_r = x0[4, i] / x0[3, i]
-            yaw_r = x0[2, i]
 
             k1_dx = v_ * ca.cos(yaw_)
             k1_dy = v_ * ca.sin(yaw_)
@@ -102,7 +100,7 @@ class CasADi_MPC_differ:
             da = dt * (k1_da + 2 * k2_da + 2 * k3_da + k4_da) / 6
             # de = dt * (k1_de + 2 * k2_de + 2 * k3_de + k4_de) / 6
 
-            s += ca.sqrt(ca.power(dx) + ca.power(dy))
+            s += ca.sqrt(ca.power(dx, 2) + ca.power(dy, 2))
             dx_predict = 3 * cx[3] * ca.power(s, 2) + 2 * cx[2] * s + cx[1]
             dy_predict = 3 * cy[3] * ca.power(s, 2) + 2 * cy[2] * s + cy[1]
             py_ref = cy[3] * ca.power(s, 3) + cy[2] * ca.power(s, 2) + cy[1] * s + cy[0]
@@ -163,17 +161,17 @@ class CasADi_MPC_differ:
         ubx[3, 0] = self.v0
         ubx[4, 0] = self.omega0
 
-        # lbx[0, -1] = -ca.inf
-        # lbx[1, -1] = -ca.inf
-        # lbx[2, -1] = -ca.pi
-        # lbx[3, -1] = 0.
-        # lbx[4, -1] = -self.omega_end
-        #
-        # ubx[0, -1] = ca.inf
-        # ubx[1, -1] = ca.inf
-        # ubx[2, -1] = ca.pi
-        # ubx[3, -1] = self.v_end
-        # ubx[4, -1] = self.omega_end
+        lbx[0, -1] = -ca.inf
+        lbx[1, -1] = -ca.inf
+        lbx[2, -1] = -ca.pi
+        lbx[3, -1] = 0.
+        lbx[4, -1] = -self.omega_end
+
+        ubx[0, -1] = ca.inf
+        ubx[1, -1] = ca.inf
+        ubx[2, -1] = ca.pi
+        ubx[3, -1] = self.v_end
+        ubx[4, -1] = self.omega_end
 
         lbg[:, :] = 0.
         ubg[:, :] = 1e-5
@@ -195,8 +193,8 @@ class CasADi_MPC_differ:
         # states: x, y, yaw, v, omega, a, omega_rate, jerk, lateral_error, heading_error
         for i in range(self.horizon):
             sum_controls += ca.sumsqr(x[3:8, i])
-            sum_error += ca.power(x[8:, i], 2)
-            sum_turning_rate += ca.power(x[4, i] * x[5, i] - self.centripetal, 2)
+            sum_error += ca.sumsqr(x[8:, i])
+            sum_turning_rate += ca.power(x[3, i] * x[4, i] - self.centripetal, 2)
             if i > 0:
                 sum_states_rate += ca.sumsqr(x[:3, i] - x[:3, i - 1])
                 sum_controls_rate += ca.sumsqr(x[3:8, i] - x[3:8, i - 1])
@@ -225,7 +223,7 @@ class CasADi_MPC_differ:
         dt = self.dt0
 
         # initialize constraints
-        gx = self.init_dynamic_constraints_cxcy(cx, cy, x, dt, x0_)
+        gx = self.init_dynamic_constraints_cxcy(cx, cy, x, dt)
         X = ca.reshape(x, -1, 1)
         G = ca.reshape(gx, -1, 1)
 
@@ -255,7 +253,7 @@ class CasADi_MPC_differ:
         op_trajectories = np.array(cal_traj[:3, :])
         op_error = np.array(cal_traj[8:, :])
 
-        return op_dt, op_trajectories, op_controls
+        return op_trajectories, op_controls, op_error
 
 
 if __name__ == '__main__':
@@ -266,14 +264,19 @@ if __name__ == '__main__':
     with open(address, 'r', encoding='utf-8') as f:
         param = yaml.load(f)
 
+    calco = Curve_Fitting()
     ut = UTurnMPC()
     ut.set_parameters(param)
     # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
     cmpc = CasADi_MPC_differ()
 
     ref_traj, ob, obst = ut.initialize_saved_data()
+    coeffx, coeffy, coefft, s0 = calco.cal_coefficient(ref_traj)
     ut.use_differ_motion = True
-    cmpc.init_model_reference_line(ref_traj)
-    op_dt, op_trajectories, op_controls = cmpc.get_result_reference_line()
-    print("OBCA total time:{:.3f}s".format(time.time() - start_time))
-    ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, ob)
+    cmpc.dt0 = 0.1
+    cmpc.horizon = int(10 / cmpc.dt0)
+
+    cmpc.init_model_reference_line(coeffx, coeffy, ref_traj)
+    op_trajectories, op_controls, op_error = cmpc.get_result_reference_line()
+    print("MPC total time:{:.3f}s".format(time.time() - start_time))
+    ut.plot_results(cmpc.dt0, op_trajectories, op_controls, ref_traj, None)

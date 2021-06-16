@@ -37,6 +37,7 @@ class CasADi_MPC_differ:
         self.omega0 = 0.1
         self.v_end = 1.5
         self.omega_end = 0.5
+        self.centripetal = 0.
 
     def init_dynamic_constraints(self, x, dt, x0):
         g1 = ca.SX.sym("g1", self.ng, self.horizon - 1)
@@ -180,9 +181,9 @@ class CasADi_MPC_differ:
         sum_controls = 0.
         sum_controls_rate = 0.
         sum_e = 0
-
+        sum_turning_rate = 0.
         for i in range(self.horizon):
-
+            sum_turning_rate += ca.power(x[3, i] * x[4, i] - self.centripetal, 2)
             sum_states += ca.sumsqr(x[:3, i])
             sum_controls += ca.sumsqr(x[3:8, i])
             sum_dist_to_ref += ca.sumsqr(x[:3, i] - ref_path[:3, i])
@@ -193,9 +194,10 @@ class CasADi_MPC_differ:
                 sum_states_rate += ca.sumsqr(x[:3, i] - x[:3, i - 1])
                 sum_controls_rate += ca.sumsqr(x[3:8, i] - x[3:8, i - 1])
 
-        obj = self.wg[3] * sum_states + self.wg[9] * sum_states_rate \
+        obj = self.wg[3] * sum_states + self.wg[8] * sum_states_rate \
               + self.wg[5] * sum_controls + self.wg[7] * sum_controls_rate \
-              + self.wg[9] * sum_e  # + self.wg[9] * sum_total_dist
+              + self.wg[9] * sum_e + self.wg[9] * sum_turning_rate
+        # + self.wg[9] * sum_total_dist
         # + self.wg[3] * sum_dist_to_ref
         # + 1e2 * self.wg[9] * ca.sumsqr(x[:3, -1] - ref_path[:3, -1])
 

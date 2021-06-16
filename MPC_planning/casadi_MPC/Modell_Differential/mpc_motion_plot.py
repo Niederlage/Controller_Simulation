@@ -22,7 +22,6 @@ class UTurnMPC():
         self.show_animation = True
         self.reserve_footprint = False
         self.plot_arrows = False
-        self.use_differ_motion = False
         self.use_controller = False
         self.use_loc_start = False
 
@@ -71,7 +70,7 @@ class UTurnMPC():
             arrow_x, arrow_y, arrow_yaw = x, y, yaw
             self.plot_arrow(arrow_x, arrow_y, arrow_yaw)
 
-    def plot_op_controls(self, v_, acc_, jerk_, yaw_, yaw_rate_, steer_, steer_rate_):
+    def plot_op_controls(self, v_, acc_, jerk_, yaw_, omega_, omega_rate_):
         fig = plt.figure()
         ax = plt.subplot(211)
         ax.plot(v_, label="v", color="red")
@@ -82,9 +81,8 @@ class UTurnMPC():
 
         ax = plt.subplot(212)
         ax.plot(yaw_ * 180 / np.pi, label="heading/grad")
-        ax.plot(yaw_rate_ * 180 / np.pi, label="yaw rate/grad")
-        ax.plot(steer_ * 180 / np.pi, label="steer/grad", color="red")
-        ax.plot(steer_rate_ * 180 / np.pi, "-.", label="steer rate/grad")
+        ax.plot(omega_ * 180 / np.pi, label="omega/grad")
+        ax.plot(omega_rate_ * 180 / np.pi, "-.", label="omega rate/grad")
         ax.grid()
         ax.legend()
 
@@ -158,9 +156,9 @@ class UTurnMPC():
                 ax.plot(self.predicted_trajectory[0, -1], self.predicted_trajectory[1, -1], "x", color="purple")
                 self.plot_robot(zst[0], zst[1], zst[2])
 
-                if not self.reserve_footprint:
-                    handles, labels = ax.get_legend_handles_labels()
-                    ax.legend(handles, labels, fontsize=10, loc="upper left")
+                # if not self.reserve_footprint:
+                #     handles, labels = ax.get_legend_handles_labels()
+                #     ax.legend(handles, labels, fontsize=10, loc="upper left")
 
                 plt.axis("equal")
                 plt.grid(True)
@@ -186,28 +184,28 @@ class UTurnMPC():
 
         self.cal_distance(op_trajectories[:2, :], len(ref_traj.T))
         self.dt = op_dt
-        print("Time resolution:{:.3f}s, total time:{:.3f}s".format(self.dt, self.dt * len(ref_traj.T)))
+        print("Time resolution:{:.3f}s, total time:{:.3f}s".format(self.dt, self.dt * len(op_trajectories.T)))
         if self.use_controller:
             self.u_regelung = np.zeros((2, len(ref_traj.T)))
         yaw_ = op_trajectories[2, :]
-        yaw_rate = np.diff(yaw_) / op_dt
-        yaw_rate_ = np.append(0., yaw_rate)
+        # omega_ = np.diff(yaw_) / op_dt
+        # omega_rate_ = np.append(0., omega_)
 
         v_ = op_controls[0, :]
-        steer_ = op_controls[1, :]
+        omega_ = op_controls[1, :]
         acc_ = op_controls[2, :]
 
         if four_states:
-            steer_rate = np.diff(op_controls[1, :]) / op_dt
-            steer_rate_ = np.append(0., steer_rate)
+            omega_rate = np.diff(op_controls[1, :]) / op_dt
+            omega_rate_ = np.append(0., omega_rate)
 
             jerk = np.diff(op_controls[2, :]) / op_dt
             jerk_ = np.append(0., jerk)
         else:
-            steer_rate_ = op_controls[3, :]
+            omega_rate_ = op_controls[3, :]
             jerk_ = op_controls[4, :]
 
-        self.plot_op_controls(v_, acc_, jerk_, yaw_, yaw_rate_, steer_, steer_rate_)
+        self.plot_op_controls(v_, acc_, jerk_, yaw_, omega_, omega_rate_)
 
         trajectory = self.try_tracking(zst, op_controls, trajectory, obst=ob, ref_traj=ref_traj)
 

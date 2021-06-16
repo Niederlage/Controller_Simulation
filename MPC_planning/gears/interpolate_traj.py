@@ -4,7 +4,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from cal_angle_from_track import CalAngleFromTracks
+from gears.cal_angle_from_track import CalAngleFromTracks
 
 
 def mod_theta(theta, t_last):
