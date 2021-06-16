@@ -64,7 +64,7 @@ if __name__ == '__main__':
     test_track = np.array([[0, 1, 1.5, 1., 0.],
                            [0, 1, 1.1, 1.9, 1.5]])
 
-    test_traj = np.load("../saved_traj.npz", allow_pickle=True)
+    test_traj = np.load("../data/smoothed_traj.npz", allow_pickle=True)
     trackx = test_traj["traj"][0]
     tracky = test_traj["traj"][1]
     trackth = np.array(test_traj["traj"][2])

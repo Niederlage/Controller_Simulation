@@ -118,7 +118,7 @@ class CasADi_MPC_OBCA_PathOnly:
                 lambdaj = lambda_[(4 * j):(4 * (j + 1)), i]
 
                 constraint1 = ca.mtimes(ca.mtimes(rotT_i, Aj.T), lambdaj) + ca.mtimes(GT, mu_i)
-                constraint2 = ca.mtimes((ca.mtimes(Aj, t_i) - bj).T, lambdaj) - ca.mtimes(gT, mu_i)
+                constraint2 = ca.mtimes((ca.mtimes(Aj, t_i) - bj).T, lambdaj) - ca.mtimes(gT, mu_i) + d
                 constraint3 = ca.sumsqr(ca.mtimes(Aj.T, lambdaj))
                 constraint10 = constraint1[0, 0]
                 constraint11 = constraint1[1, 0]
@@ -144,8 +144,8 @@ class CasADi_MPC_OBCA_PathOnly:
                 sum_states_rate += ca.sumsqr(x[:3, i] - x[:3, i - 1])  # xk - xk-1
                 sum_controls_rate += ca.sumsqr(x[3:, i] - x[3:, i - 1])  # uk - uk-1
 
-        obj = self.wg[2] * sum_states_rate \
-              + self.wg[7] * sum_controls + 1e1 * self.wg[6] * sum_controls_rate \
+        obj = self.wg[9] * sum_states_rate \
+              + self.wg[9] * sum_controls + 1e1 * self.wg[6] * sum_controls_rate \
               + self.wg[2] * sum_dist_to_ref + 1e6 * self.wg[9] * ca.sumsqr(x[:2, -1] - ref_path[:2, -1]) + 1e6 * \
               self.wg[9] * ca.sumsqr(x[2, -1] - ref_path[2, -1])
         return obj
@@ -172,7 +172,7 @@ class CasADi_MPC_OBCA_PathOnly:
             ubg[:self.ng, i] = 1e-5
 
             # constraint1 rotT_i, Aj.T * lambdaj + GT * mu_i
-            lbg[self.ng: self.ng + 2 * self.obst_num, i] = -1e-5
+            lbg[self.ng: self.ng + 2 * self.obst_num, i] = 0.
             ubg[self.ng: self.ng + 2 * self.obst_num, i] = 1e-5
 
             # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i
@@ -303,7 +303,7 @@ if __name__ == '__main__':
     start_time = time.time()
     large = True
     if large:
-        address = "../config_OBCA_large.yaml"
+        address = "../../config_OBCA_large.yaml"
     else:
         address = "../config_OBCA.yaml"
     with open(address, 'r', encoding='utf-8') as f:

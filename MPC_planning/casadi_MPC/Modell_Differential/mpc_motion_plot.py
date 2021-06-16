@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 plt.switch_backend('TkAgg')
 import numpy as np
 from gears.polygon_generator import cal_coeff_mat
-from gears.Controller import Controller
+from controller.Controller import Controller
 
 
 class UTurnMPC():

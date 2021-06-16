@@ -36,7 +36,7 @@ class Spline:
         for i in range(self.nx - 1):
             self.d.append((self.c[i + 1] - self.c[i]) / (3.0 * h[i]))
             tb = (self.a[i + 1] - self.a[i]) / h[i] - h[i] * \
-                (self.c[i + 1] + 2.0 * self.c[i]) / 3.0
+                 (self.c[i + 1] + 2.0 * self.c[i]) / 3.0
             self.b.append(tb)
 
     def calc(self, t):
@@ -55,7 +55,7 @@ class Spline:
         i = self.__search_index(t)
         dx = t - self.x[i]
         result = self.a[i] + self.b[i] * dx + \
-            self.c[i] * dx ** 2.0 + self.d[i] * dx ** 3.0
+                 self.c[i] * dx ** 2.0 + self.d[i] * dx ** 3.0
 
         return result
 
@@ -122,7 +122,7 @@ class Spline:
         B = np.zeros(self.nx)
         for i in range(self.nx - 2):
             B[i + 1] = 3.0 * (self.a[i + 2] - self.a[i + 1]) / \
-                h[i + 1] - 3.0 * (self.a[i + 1] - self.a[i]) / h[i]
+                       h[i + 1] - 3.0 * (self.a[i + 1] - self.a[i]) / h[i]
         return B
 
 
@@ -162,8 +162,17 @@ class Spline2D:
         ddx = self.sx.calcdd(s)
         dy = self.sy.calcd(s)
         ddy = self.sy.calcdd(s)
-        k = (ddy * dx - ddx * dy) / ((dx ** 2 + dy ** 2)**(3 / 2))
+        k = (ddy * dx - ddx * dy) / ((dx ** 2 + dy ** 2) ** (3 / 2))
         return k
+
+    def mod_theta(self, theta, t_last=0):
+        if abs(theta - t_last) > np.pi / 2:
+            if np.sign(theta) > 0:
+                return theta - np.pi
+            else:
+                return theta + np.pi
+
+        return (theta + np.pi) % (2 * np.pi) - np.pi
 
     def calc_yaw(self, s):
         """
@@ -171,7 +180,7 @@ class Spline2D:
         """
         dx = self.sx.calcd(s)
         dy = self.sy.calcd(s)
-        yaw = math.atan2(dy, dx)
+        yaw = self.mod_theta(math.atan2(dy, dx))
         return yaw
 
 
@@ -193,19 +202,25 @@ def calc_spline_course(x, y, ds=0.1):
 def main():  # pragma: no cover
     print("Spline 2D test")
     import matplotlib.pyplot as plt
-    x = [-2.5, 0.0, 2.5, 5.0, 7.5, 3.0, -1.0]
-    y = [0.7, -6, 5, 6.5, 0.0, 5.0, -2.0]
-    ds = 0.1  # [m] distance of each intepolated points
-
+    x = [0., 0.5, 5.0, 6.5, 10.0, 15.0]
+    y = [0., .5, 4.5, 0.0, -5.0, -2.0]
+    ds = 0.01  # [m] distance of each intepolated points
+    loads = np.load("../data/smoothed_traj.npz")
+    x = loads["refpath"][0, :]
+    y = loads["refpath"][1, :]
+    theta = loads["refpath"][2, :]
     sp = Spline2D(x, y)
     s = np.arange(0, sp.s[-1], ds)
 
     rx, ry, ryaw, rk = [], [], [], []
+    # yaw_last = theta[0]
     for i_s in s:
         ix, iy = sp.calc_position(i_s)
         rx.append(ix)
         ry.append(iy)
-        ryaw.append(sp.calc_yaw(i_s))
+        yaw_ = sp.calc_yaw(i_s)
+        ryaw.append(yaw_)
+        yaw_last = yaw_
         rk.append(sp.calc_curvature(i_s))
 
     plt.subplots(1)
@@ -217,12 +232,20 @@ def main():  # pragma: no cover
     plt.ylabel("y[m]")
     plt.legend()
 
-    plt.subplots(1)
-    plt.plot(s, [np.rad2deg(iyaw) for iyaw in ryaw], "-r", label="yaw")
-    plt.grid(True)
-    plt.legend()
-    plt.xlabel("line length[m]")
-    plt.ylabel("yaw angle[deg]")
+    f = plt.figure()
+    ax = plt.subplot(111)
+    ax.plot(s, [np.rad2deg(iyaw) for iyaw in ryaw], "-r", label="yaw")
+    ax.grid(True)
+    ax.legend()
+    ax.set_xlabel("line length[m]")
+    ax.set_ylabel("yaw angle[deg]")
+
+    # ax = plt.subplot(212)
+    # ax.plot(np.rad2deg(theta), "-r", label="yaw_ref")
+    # ax.grid(True)
+    # ax.legend()
+    # ax.set_xlabel("line length[m]")
+    # ax.set_ylabel("yaw angle[deg]")
 
     plt.subplots(1)
     plt.plot(s, rk, "-r", label="curvature")

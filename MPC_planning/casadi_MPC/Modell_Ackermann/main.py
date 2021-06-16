@@ -2,6 +2,7 @@ import time
 
 import numpy as np
 import yaml
+from gears.cubic_spline_planner import Spline2D
 from mpc_motion_plot import UTurnMPC
 from Modell_Ackermann.casadi_OBCA_warmup import CasADi_MPC_WarmUp
 from Modell_Ackermann.casadi_OBCA import CasADi_MPC_OBCA
@@ -58,6 +59,26 @@ def get_bounds():
     return np.block([horizon_l, horizon_u, vertical_l, vertical_u])
 
 
+def expand_path(refpath, ds):
+    x = refpath[0, :]
+    y = refpath[1, :]
+    theta0 = refpath[2, 0]
+    sp = Spline2D(x, y)
+    s = np.arange(0, sp.s[-1], ds)
+
+    rx, ry, ryaw, rk = [], [], [], []
+    yaw_last = theta0
+    for i_s in s:
+        ix, iy = sp.calc_position(i_s)
+        rx.append(ix)
+        ry.append(iy)
+        yaw_ = sp.calc_yaw(i_s)
+        ryaw.append(yaw_)
+        yaw_last = yaw_
+        # rk.append(sp.calc_curvature(i_s))
+    return np.array([rx, ry, ryaw])
+
+
 def get_all_obsts():
     loadmap = np.load("../data/saved_obmap.npz", allow_pickle=True)
     ob1 = loadmap["pointmap"][0]
@@ -71,8 +92,8 @@ def get_all_obsts():
 
     ob_constraint_mat = loadmap["constraint_mat"]
     obst = []
-    obst.append(ob_constraint_mat[:4, :])
     obst.append(ob_constraint_mat[4:8, :])
+    obst.append(ob_constraint_mat[:4, :])
     obst.append(ob_constraint_mat[8:12, :])
     return ob, obst, obst_points
 
@@ -163,11 +184,13 @@ def main():
     try_segment = False
     load_file = False
     large = True
+    ds = 0.1
 
     if not load_file:
-        ref_traj, param, obst, ob_points = hybrid_a_star_initialization(large)
-
-        if len(ref_traj.T) > 500:
+        ref_path, param, obst, ob_points = hybrid_a_star_initialization(large)
+        ref_traj = expand_path(ref_path, ds)
+        # ref_traj = ref_path
+        if len(ref_path.T) > 500:
             ref_traj = None
 
         if ref_traj is not None:
@@ -189,7 +212,7 @@ def main():
                     op_dt, op_trajectories, op_controls = run_TDROBCA_mpc(param, ref_traj, shape, obst)
 
             print("warm up OBCA total time:{:.3f}s".format(time.time() - start_time))
-            np.savez("../data/smoothed_traj", dt=op_dt, traj=op_trajectories, control=op_controls, refpath=ref_traj)
+            # np.savez("../data/smoothed_traj", dt=op_dt, traj=op_trajectories, control=op_controls, refpath=ref_traj)
 
             ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, ob_points, four_states=True)
 

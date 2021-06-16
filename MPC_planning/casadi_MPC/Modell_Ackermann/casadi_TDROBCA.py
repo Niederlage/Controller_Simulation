@@ -88,10 +88,10 @@ class CasADi_MPC_TDROBCA:
             k3_dsteer = steer_rate_
             k3_da = jerk_
 
-            k4_dx = (v_ + 0.5 * dt * k3_dv) * ca.cos(yaw_ + 0.5 * dt * k3_dyaw)
-            k4_dy = (v_ + 0.5 * dt * k3_dv) * ca.sin(yaw_ + 0.5 * dt * k3_dyaw)
-            k4_dyaw = (v_ + 0.5 * dt * k3_dv) / self.base * ca.tan(steer_ + 0.5 * dt * k3_dsteer)
-            k4_dv = a_ + 0.5 * dt * k3_da
+            k4_dx = (v_ + dt * k3_dv) * ca.cos(yaw_ + dt * k3_dyaw)
+            k4_dy = (v_ + dt * k3_dv) * ca.sin(yaw_ + dt * k3_dyaw)
+            k4_dyaw = (v_ + dt * k3_dv) / self.base * ca.tan(steer_ + dt * k3_dsteer)
+            k4_dv = a_ + dt * k3_da
             k4_dsteer = steer_rate_
             k4_da = jerk_
 
@@ -164,19 +164,22 @@ class CasADi_MPC_TDROBCA:
 
         return gx
 
-    def init_objects(self, x_, d_, ref_path):
-
+    def init_objects(self, dt, x_, d_, ref_path):
+        sum_time = 0
         sum_mindist = 0
         sum_states = 0
         sum_states_rate = 0
         for i in range(self.horizon):
+            sum_time += ca.power(dt, 2)
             sum_states += ca.sumsqr(x_[:, i])
             sum_mindist += ca.sumsqr(d_[:, i])
             if i > 0:
                 sum_states_rate += ca.sumsqr(x_[:, i] - x_[:, i - 1])
 
-        obj = 1e2 * self.wg[9] * sum_states_rate + 1e26 * self.wg[9] * sum_mindist + 1e6 * self.wg[9] * ca.sumsqr(
-            x_[:2, -1] - ref_path[:2, -1]) + 1e6 * self.wg[9] * ca.sumsqr(x_[2, -1] - ref_path[2, -1])
+        obj = self.wg[3] * sum_states_rate + 5e2 * self.wg[9] * sum_mindist \
+              + 1e0 * self.wg[7] * ca.sumsqr(x_[:2, -1] - ref_path[:2, -1]) \
+              + 1e0 * self.wg[6] * ca.sumsqr(x_[2, -1] - ref_path[2, -1]) \
+              + 5 * self.wg[2] * sum_time
         return obj
 
     def init_bounds_OBCA(self, start, goal):
@@ -203,14 +206,14 @@ class CasADi_MPC_TDROBCA:
             lbx[7, i] = -self.jerk_max  # jerk
             ubx[7, i] = self.jerk_max  # jerk
 
-            lbx[8:-self.obst_num, i] = 1e-6  # lambda, mu
+            lbx[8:-self.obst_num, i] = 1e-8  # lambda, mu
             ubx[8:-self.obst_num, i] = 1.  # lambda, mu
             lbx[-self.obst_num:, i] = -1.  # dmin
-            ubx[-self.obst_num:, i] = -8e-4  # -4e-5  # dmin
+            ubx[-self.obst_num:, i] = -1e-6  # -4e-5  # dmin
 
         # constraint1 rotT_i @ Aj.T @ lambdaj + GT @ mu_i == 0
-        lbg[6:6 + 2 * self.obst_num, :] = -1e-5
-        ubg[6:6 + 2 * self.obst_num, :] = 1e-5
+        lbg[6:6 + 2 * self.obst_num, :] = 0.
+        ubg[6:6 + 2 * self.obst_num, :] = 1e-6
 
         # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i + dmin == 0
         lbg[6 + 2 * self.obst_num:6 + 3 * self.obst_num, :] = 0.
@@ -248,8 +251,8 @@ class CasADi_MPC_TDROBCA:
 
         lbx_ = ca.reshape(lbx, -1, 1)
         ubx_ = ca.reshape(ubx, -1, 1)
-        # lbx_ = ca.vertcat(0.01, lbx_)
-        # ubx_ = ca.vertcat(0.5, ubx_)
+        lbx_ = ca.vertcat(0.01, lbx_)
+        ubx_ = ca.vertcat(0.1, ubx_)
 
         lbg_ = ca.reshape(lbg, -1, 1)
         ubg_ = ca.reshape(ubg, -1, 1)
@@ -259,7 +262,8 @@ class CasADi_MPC_TDROBCA:
     def get_dt(self, ref_path):
         diff_s = np.diff(ref_path[:2, :], axis=1)
         sum_s = np.sum(np.hypot(diff_s[0], diff_s[1]))
-        self.dt0 = 1.4 * (sum_s / self.v_max + self.v_max / self.a_max) / len(ref_path.T)
+        self.dt0 = 1.5 * (sum_s / self.v_max + self.v_max / self.a_max) / len(ref_path.T)
+        # self.dt0 = 0.1
 
     def states_initialization(self, reference_path):
         x0 = ca.DM(self.nx, self.horizon)
@@ -307,6 +311,7 @@ class CasADi_MPC_TDROBCA:
         v0 = self.dual_variables_initialization()
 
         # initialize variables
+        dt = ca.SX.sym("dt")
         x = ca.SX.sym("x", self.nx, self.horizon)  # (x, y, theta, v, steer, a, steer_rate, jerk)
         lambda_ = ca.SX.sym("lambda", 4 * self.obst_num, self.horizon)
         mu_ = ca.SX.sym("mu", 4, self.horizon)
@@ -314,21 +319,24 @@ class CasADi_MPC_TDROBCA:
 
         # initialize constraints
         g1 = ca.SX.sym("g1", self.ng, self.horizon - 1)
-        g1 = self.init_dynamic_constraints(x, self.dt0, g1)
+        # g1 = self.init_dynamic_constraints(x, self.dt0, g1)
+        g1 = self.init_dynamic_constraints(x, dt, g1)
         g2 = ca.SX.sym("g2", self.obst_num * 4, self.horizon - 1)
         g2 = self.init_OBCA_constraints(x, lambda_, mu_, d_, shape_m, obst_m, g2)
         gx = ca.vertcat(g1, g2)
 
         X, G = self.organize_variables(x, lambda_, mu_, d_, gx)
+        X = ca.vertcat(dt, X)
         X0, XL, XU, GL, GU = self.organize_bounds(x0_, v0)
+        X0 = ca.vertcat(self.dt0, X0)
 
         # initialize objectives
-        F = self.init_objects(x, d_, x0_)
+        F = self.init_objects(dt, x, d_, x0_)
 
         nlp = {"x": X, "f": F, "g": G}
         opts_setting = {"expand": False,
                         "ipopt.hessian_approximation": "exact",
-                        'ipopt.max_iter': 200,
+                        'ipopt.max_iter': 100,
                         'ipopt.print_level': 3,
                         'print_time': 1,
                         'ipopt.acceptable_tol': 1e-8,
@@ -358,8 +366,10 @@ class CasADi_MPC_TDROBCA:
         return X0, lbx, ubx, lbg, ubg
 
     def get_result_OBCA(self):
-        op_dt = float(self.dt0)
-        cal_traj = ca.reshape(self.x_opt, self.nx + (self.obst_num + 1) * 4 + self.obst_num, self.horizon)
+        # op_dt = float(self.dt0)
+        op_dt = float(self.x_opt[0])
+
+        cal_traj = ca.reshape(self.x_opt[1:], self.nx + (self.obst_num + 1) * 4 + self.obst_num, self.horizon)
         # cal_traj = ca.reshape(self.x_opt[1:], self.horizon, self.nx + (self.obst_num + 1) * 4).T
         op_controls = np.array(cal_traj[3:8, :])
         op_trajectories = np.array(cal_traj[:3, :])
@@ -376,7 +386,7 @@ if __name__ == '__main__':
 
     large = True
     if large:
-        address = "../config_OBCA_large.yaml"
+        address = "../../config_OBCA_large.yaml"
     else:
         address = "../config_OBCA.yaml"
     with open(address, 'r', encoding='utf-8') as f:
@@ -389,6 +399,7 @@ if __name__ == '__main__':
     cmpc.set_parameters(param)
     ref_traj, ob, obst = ut.initialize_saved_data()
     shape = ut.get_car_shape()
+    cmpc.get_dt(ref_traj)
 
     cmpc.init_model_OBCA(ref_traj, shape, obst)
     op_dt, op_trajectories, op_controls, vl, vm = cmpc.get_result_OBCA()

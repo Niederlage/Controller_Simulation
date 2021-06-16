@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 plt.switch_backend('TkAgg')
 import numpy as np
 from gears.polygon_generator import cal_coeff_mat
-from gears.Controller import Controller
+from controller.Controller import Controller
 
 
 class UTurnMPC():
@@ -71,9 +71,9 @@ class UTurnMPC():
             k3_dv = a_  # + 0.5 * dt * k2_da
             k3_dsteer = steer_rate_
 
-            k4_dx = (v_ + 0.5 * dt * k3_dv) * np.cos(yaw_ + 0.5 * dt * k3_dyaw)
-            k4_dy = (v_ + 0.5 * dt * k3_dv) * np.sin(yaw_ + 0.5 * dt * k3_dyaw)
-            k4_dyaw = (v_ + 0.5 * dt * k3_dv) / self.L * np.tan(steer_ + 0.5 * dt * k3_dsteer)
+            k4_dx = (v_ + dt * k3_dv) * np.cos(yaw_ + dt * k3_dyaw)
+            k4_dy = (v_ + dt * k3_dv) * np.sin(yaw_ + dt * k3_dyaw)
+            k4_dyaw = (v_ + dt * k3_dv) / self.L * np.tan(steer_ + dt * k3_dsteer)
 
             x_ += dt * (k1_dx + 2 * k2_dx + 2 * k3_dx + k4_dx) / 6
             y_ += dt * (k1_dy + 2 * k2_dy + 2 * k3_dy + k4_dy) / 6
@@ -176,10 +176,7 @@ class UTurnMPC():
                 u_regelung = self.lqr_regler(zst, u_op, k)
                 u_in[2:4] += u_regelung
 
-            if self.use_differ_motion:
-                zst = self.differ_motion_model(zst, u_in, self.dt)  # simulate robot
-            else:
-                zst = self.ackermann_motion_model(zst, u_in, self.dt)  # simulate robot
+            zst = self.ackermann_motion_model(zst, u_in, self.dt)  # simulate robot
 
             trajectory = np.vstack((trajectory, zst))  # store state history
 
@@ -212,15 +209,9 @@ class UTurnMPC():
 
                 plt.axis("equal")
                 plt.grid(True)
-                if k % 1 == 0:
-                    plt.pause(0.001)
-                # if k == 0:
-                #     fig = plt.figure()
-                #     ptr = fig
-                # else:
-                #     fig = ptr
-                # self.plot_regelung(fig, k)
-                aaaa = plt.get_figlabels()
+                if u_op.shape[1] > 200:
+                    if k % 10 == 0:
+                        plt.pause(0.001)
                 k += 1
 
             if k >= u_op.shape[1]:
@@ -308,7 +299,7 @@ class UTurnMPC():
                 plt.axis("equal")
                 plt.grid(True)
                 if i % 5 == 0:
-                    plt.pause(0.0001)
+                    plt.pause(0.01)
                 i += 1
 
                 if i >= op_trajectories.shape[1]:

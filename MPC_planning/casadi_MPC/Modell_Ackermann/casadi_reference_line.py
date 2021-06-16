@@ -309,7 +309,7 @@ if __name__ == '__main__':
     start_time = time.time()
     large = True
     if large:
-        address = "../config_OBCA_large.yaml"
+        address = "../../config_OBCA_large.yaml"
     else:
         address = "../config_OBCA.yaml"
     with open(address, 'r', encoding='utf-8') as f:
