@@ -77,7 +77,7 @@ def main():
     address = "../../config_differ_smoother.yaml"
     load_file = False
     dt = 0.05  # [s]
-    local_horizon = 20  # [s]
+    local_horizon = 30  # [s]
 
     if not load_file:
         original_path, param, obst = hybrid_a_star_initialization(address)
