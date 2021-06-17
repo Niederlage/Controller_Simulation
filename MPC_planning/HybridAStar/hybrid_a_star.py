@@ -30,7 +30,7 @@ class HybridAStar:
         self.ROBOT_RADIUS = 1.0  # robot radius
 
         self.SB_COST = 5.0  # switch back penalty cost
-        self.BACK_COST = 10  # backward penalty cost
+        self.BACK_COST = 1e7  # backward penalty cost
         self.STEER_CHANGE_COST = 1.0  # steer angle change penalty cost
         self.STEER_COST = 10.0  # steer angle change penalty cost
         self.H_COST = 15.0  # Heuristic cost
@@ -380,26 +380,21 @@ class HybridAStar:
 
             return np.array([ox, oy])
 
-    def init_startpoints(self, loadmap=True, large=True):
+    def init_startpoints(self, address, loadmap=True, large=True):
         print("Start Hybrid A* planning")
         if loadmap:
-            if large:
-                address = "../config_OBCA_large.yaml"
-            else:
-                address = "../config_OBCA.yaml"
             with open(address, 'r', encoding='utf-8') as f:
                 param = yaml.load(f)
             sx = param["start"]
             ex = param["goal"]
             start = [sx[0], sx[1], np.deg2rad(sx[2])]
             goal = [ex[0], ex[1], np.deg2rad(ex[2])]
-            if large:
-                self.car.set_parameters(param)
+            self.car.set_parameters(param)
         else:
             # Set Initial parameters
             start = [10.0, 10.0, np.deg2rad(90.0)]
             goal = [20.0, 45.0, np.deg2rad(0.0)]
-
+        loadmap = False
         obst = self.generate_obmap(loadmap=loadmap)
 
         print("start : ", start)
@@ -421,7 +416,7 @@ class HybridAStar:
 
 def main():
     planner = HybridAStar()
-    start, goal, obst = planner.init_startpoints()
+    start, goal, obst = planner.init_startpoints(address)
 
     if planner.show_animation:
         plt.plot(obst[0], obst[1], ".k")
@@ -451,4 +446,5 @@ def main():
 
 
 if __name__ == '__main__':
+    address = "../config_differ_smoother.yaml"
     main()

@@ -10,15 +10,6 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 
-# Parameters
-k = 0.1  # look forward gain
-Lfc = 2.0  # [m] look-ahead distance
-Kp = 1.0  # speed proportional gain
-dt = 0.1  # [s] time tick
-WB = 2.9  # [m] wheel base of vehicle
-
-show_animation = True
-
 
 class State:
 
@@ -30,7 +21,7 @@ class State:
         self.rear_x = self.x - ((WB / 2) * math.cos(self.yaw))
         self.rear_y = self.y - ((WB / 2) * math.sin(self.yaw))
 
-    def update(self, a, delta):
+    def update(self, a, delta, dt):
         self.x += self.v * math.cos(self.yaw) * dt
         self.y += self.v * math.sin(self.yaw) * dt
         self.yaw += self.v / WB * math.tan(delta) * dt
@@ -149,11 +140,21 @@ def main():
     cy = [math.sin(ix / 5.0) * ix / 2.0 for ix in cx]
 
     target_speed = 10.0 / 3.6  # [m/s]
+    loads = np.load("../data/smoothed_traj_differ.npz")
+    dt = loads["dt"]
+    op_path = loads["traj"]
+    op_input = loads["control"]
+    ref_path = loads["refpath"]
+    cx = ref_path[0, :]
+    cy = ref_path[1, :]
 
     T = 100.0  # max simulation time
-
+    x0 = ref_path[0, 0]
+    y0 = ref_path[1, 0]
+    yaw0 = ref_path[2, 0]
     # initial state
-    state = State(x=-0.0, y=-3.0, yaw=0.0, v=0.0)
+    # state = State(x=-0.0, y=-3.0, yaw=0.0, v=0.0)
+    state = State(x=x0, y=y0, yaw=yaw0, v=0.0)
 
     lastIndex = len(cx) - 1
     time = 0.0
@@ -169,7 +170,7 @@ def main():
         di, target_ind = pure_pursuit_steer_control(
             state, target_course, target_ind)
 
-        state.update(ai, di)  # Control vehicle
+        state.update(ai, di, dt)  # Control vehicle
 
         time += dt
         states.append(time, state)
@@ -212,4 +213,12 @@ def main():
 
 if __name__ == '__main__':
     print("Pure pursuit path tracking simulation start")
+    # Parameters
+    k = 0.5  # look forward gain
+    Lfc = 2.0  # [m] look-ahead distance
+    Kp = 1.0  # speed proportional gain
+    # dt = 0.1  # [s] time tick
+    WB = 2.9  # [m] wheel base of vehicle
+
+    show_animation = True
     main()

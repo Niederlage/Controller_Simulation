@@ -17,7 +17,7 @@ class Curve_Fitting:
         # tpath = np.append(refpath[2, ::num], refpath[2, -1])
 
         s = self.get_s_(refpath[:2, :])
-        S = self.get_S_mat(s, 4)
+        S = self.get_S_mat(s, 6)
         xpath = refpath[0, :]
         ypath = refpath[1, :]
         tpath = refpath[2, :]

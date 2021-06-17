@@ -35,6 +35,10 @@ class UTurnMPC():
         self.LB = param["LB"]  # distance from rear to vehicle back end
         self.W = param["W"]
 
+    def normalize_angle(self, yaw):
+        # if abs(yaw) > 2 * np.pi:
+        return (yaw + np.pi) % (2 * np.pi) - np.pi
+
     def differ_motion_model(self, zst, u_in, dt, Runge_Kutta=True):
         v_ = u_in[0]
         omega_ = u_in[1]
@@ -42,10 +46,45 @@ class UTurnMPC():
         y_ = zst[1]
         yaw_ = zst[2]
 
-        x_ += v_ * np.cos(yaw_) * dt
-        y_ += v_ * np.sin(yaw_) * dt
-        yaw_ += omega_ * dt
+        k1_dx = v_ * np.cos(yaw_)
+        k1_dy = v_ * np.sin(yaw_)
+        k1_dyaw = omega_
+        # k1_dv = a_
+        # k1_domega = omega_rate_
+        # k1_da = jerk_
 
+        k2_dx = v_ * np.cos(yaw_ + 0.5 * dt * k1_dyaw)
+        k2_dy = v_ * np.sin(yaw_ + 0.5 * dt * k1_dyaw)
+        k2_dyaw = omega_
+        # k2_dv = a_ + 0.5 * dt * k1_da
+        # k2_domega = omega_rate_
+        # k2_da = jerk_
+
+        k3_dx = v_ * np.cos(yaw_ + 0.5 * dt * k2_dyaw)
+        k3_dy = v_ * np.sin(yaw_ + 0.5 * dt * k2_dyaw)
+        k3_dyaw = omega_
+        # k3_dv = a_ + 0.5 * dt * k2_da
+        # k3_domega = omega_rate_
+        # k3_da = jerk_
+
+        k4_dx = v_ * np.cos(yaw_ + 0.5 * dt * k3_dyaw)
+        k4_dy = v_ * np.sin(yaw_ + 0.5 * dt * k3_dyaw)
+        k4_dyaw = omega_
+        # k4_dv = a_ + 0.5 * dt * k3_da
+        # k4_domega = omega_rate_
+        # k4_da = jerk_
+
+        dx = dt * (k1_dx + 2 * k2_dx + 2 * k3_dx + k4_dx) / 6
+        dy = dt * (k1_dy + 2 * k2_dy + 2 * k3_dy + k4_dy) / 6
+        dyaw = dt * (k1_dyaw + 2 * k2_dyaw + 2 * k3_dyaw + k4_dyaw) / 6
+        # dv = dt * (k1_dv + 2 * k2_dv + 2 * k3_dv + k4_dv) / 6
+        # domega = dt * (k1_domega + 2 * k2_domega + 2 * k3_domega + k4_domega) / 6
+        # da = dt * (k1_da + 2 * k2_da + 2 * k3_da + k4_da) / 6
+
+        x_ += dx
+        y_ += dy
+        yaw_ += dyaw
+        yaw_ = self.normalize_angle(yaw_)
         return np.array([x_, y_, yaw_])
 
     def plot_arrow(self, x, y, yaw, length=1.5, width=0.5):  # pragma: no cover
@@ -118,7 +157,7 @@ class UTurnMPC():
         self.u_regelung[:, k] = u_regelung
         return u_regelung
 
-    def try_tracking(self, zst, u_op, trajectory, obst=None, ref_traj=None):
+    def try_tracking(self, zst, u_op, trajectory, ref_traj=None):
         k = 0
         f = plt.figure()
         ax = plt.subplot()
@@ -139,15 +178,11 @@ class UTurnMPC():
                     'key_release_event',
                     lambda event: [exit(0) if event.key == 'escape' else None])
 
-                if not self.reserve_footprint:
-                    plt.cla()
-                    self.plot_arrows = True
+                plt.cla()
+                self.plot_arrows = True
 
                 if ref_traj is not None:
                     plt.plot(ref_traj[0, 1:], ref_traj[1, 1:], "-", color="orange", label="warm start reference")
-                if obst is not None:
-                    for obi in obst:
-                        plt.plot(obi[:, 0], obi[:, 1], ".", color="black", label="obstacles")
 
                 ax.plot(self.predicted_trajectory[0, :], self.predicted_trajectory[1, :], "xg", label="MPC prediciton")
                 ax.plot(trajectory[:, 0], trajectory[:, 1], "-r")
@@ -156,13 +191,12 @@ class UTurnMPC():
                 ax.plot(self.predicted_trajectory[0, -1], self.predicted_trajectory[1, -1], "x", color="purple")
                 self.plot_robot(zst[0], zst[1], zst[2])
 
-                # if not self.reserve_footprint:
-                #     handles, labels = ax.get_legend_handles_labels()
-                #     ax.legend(handles, labels, fontsize=10, loc="upper left")
-
                 plt.axis("equal")
                 plt.grid(True)
-                if k % 1 == 0:
+                if u_op.shape[1] > 200:
+                    if k % 20 == 0:
+                        plt.pause(0.001)
+                else:
                     plt.pause(0.001)
 
                 k += 1
@@ -173,7 +207,7 @@ class UTurnMPC():
 
         return trajectory
 
-    def plot_results(self, op_dt, op_trajectories, op_controls, ref_traj, ob, four_states=False):
+    def plot_results(self, op_dt, op_trajectories, op_controls, ref_traj, four_states=False):
 
         self.predicted_trajectory = op_trajectories
         zst = ref_traj[:, 0]
@@ -207,8 +241,9 @@ class UTurnMPC():
 
         self.plot_op_controls(v_, acc_, jerk_, yaw_, omega_, omega_rate_)
 
-        trajectory = self.try_tracking(zst, op_controls, trajectory, obst=ob, ref_traj=ref_traj)
+        trajectory = self.try_tracking(zst, op_controls, trajectory, ref_traj=ref_traj)
 
+    def show_plot(self):
         print("Done")
         plt.show()
 

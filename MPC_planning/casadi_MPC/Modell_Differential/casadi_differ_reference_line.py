@@ -1,6 +1,7 @@
 import casadi as ca
 import numpy as np
 import time
+from gears.cubic_spline_planner import Spline2D
 from mpc_motion_plot import UTurnMPC
 import yaml
 
@@ -37,7 +38,7 @@ class CasADi_MPC_differ:
         self.omega0 = 0.1
         self.v_end = 1.5
         self.omega_end = 0.5
-        self.centripetal = 0.
+        self.centripetal = 0.8
 
     def init_dynamic_constraints(self, x, dt, x0):
         g1 = ca.SX.sym("g1", self.ng, self.horizon - 1)
@@ -121,7 +122,7 @@ class CasADi_MPC_differ:
         for i in range(self.horizon):
             lbx[0, i] = -ca.inf
             lbx[1, i] = -ca.inf
-            lbx[2, i] = -ca.pi / 2  # th
+            lbx[2, i] = -ca.pi  # th
             lbx[3, i] = 0.  # v
             lbx[4, i] = -self.omega_max  # omega
             lbx[5, i] = -self.a_max  # a
@@ -163,6 +164,18 @@ class CasADi_MPC_differ:
         ubx[3, -1] = self.v_end
         ubx[4, -1] = self.omega_end
 
+        # lbx[0, -1] = -ca.inf
+        # lbx[1, -1] = -ca.inf
+        # lbx[2, -1] = -ca.pi
+        # lbx[3, -1] = 0.
+        # lbx[4, -1] = -self.omega_end
+        #
+        # ubx[0, -1] = ca.inf
+        # ubx[1, -1] = ca.inf
+        # ubx[2, -1] = ca.pi
+        # ubx[3, -1] = self.v_end
+        # ubx[4, -1] = self.omega_end
+
         # lbg[, :] = 0.
         # ubg[-1, :] = 1e-5
 
@@ -175,18 +188,20 @@ class CasADi_MPC_differ:
 
     def init_objects(self, x, ref_path):
         sum_total_dist = 0
-        sum_dist_to_ref = 0
         sum_states = 0.
         sum_states_rate = 0.
         sum_controls = 0.
         sum_controls_rate = 0.
         sum_e = 0
         sum_turning_rate = 0.
+        sum_to_ref_vel = 0.
+
         for i in range(self.horizon):
-            sum_turning_rate += ca.power(x[3, i] * x[4, i] - self.centripetal, 2)
+            sum_turning_rate += ca.power(x[3, i] ** 2 * x[4, i], 2)
+            sum_to_ref_vel += ca.power(x[3, i] - self.v_max, 2)
             sum_states += ca.sumsqr(x[:3, i])
             sum_controls += ca.sumsqr(x[3:8, i])
-            sum_dist_to_ref += ca.sumsqr(x[:3, i] - ref_path[:3, i])
+            # sum_dist_to_ref += ca.sumsqr(x[:3, i] - ref_path[:3, i])
             sum_e += ca.power(x[8, i], 2)
 
             if i > 0:
@@ -194,51 +209,29 @@ class CasADi_MPC_differ:
                 sum_states_rate += ca.sumsqr(x[:3, i] - x[:3, i - 1])
                 sum_controls_rate += ca.sumsqr(x[3:8, i] - x[3:8, i - 1])
 
-        obj = self.wg[3] * sum_states + self.wg[8] * sum_states_rate \
-              + self.wg[5] * sum_controls + self.wg[7] * sum_controls_rate \
-              + self.wg[9] * sum_e + self.wg[9] * sum_turning_rate
-        # + self.wg[9] * sum_total_dist
-        # + self.wg[3] * sum_dist_to_ref
-        # + 1e2 * self.wg[9] * ca.sumsqr(x[:3, -1] - ref_path[:3, -1])
+        obj = self.wg[5] * sum_states_rate \
+              + self.wg[6] * sum_controls + self.wg[9] * sum_controls_rate \
+              + self.wg[3] * sum_e + self.wg[8] * sum_turning_rate \
+              + self.wg[3] * sum_to_ref_vel
 
         return obj
 
-    def states_initialization(self, reference_path):
-        x0 = ca.DM(self.nx, self.horizon)
+    def cal_global_Horizon(self, reference_path, dt_):
         diff_s = np.diff(reference_path[:2, :], axis=1)
         sum_s = np.sum(np.hypot(diff_s[0], diff_s[1]))
-        self.dt0 = 1.4 * (sum_s / self.v_max + self.v_max / self.a_max) / self.horizon
-        print("predicted_dt:", self.dt0)
-        last_v = 0.
-        last_a = 0.
-        last_omega = 0.
-        # states: x, y, yaw, v, omega, a, omega_rate, jerk, lateral
+        N = int(1.4 * (sum_s / self.v_max + self.v_max / self.a_max) / dt_)
+        return N, sum_s
+
+    def states_initialization(self, reference_path):
+        x0 = ca.DM(self.nx, self.horizon)
         for i in range(self.horizon):
             x0[0, i] = reference_path[0, i]
             x0[1, i] = reference_path[1, i]
             x0[2, i] = reference_path[2, i]
-
-            if i > 0:
-                ds = np.linalg.norm(reference_path[:2, i] - reference_path[:2, i - 1])
-                dyaw = reference_path[2, i] - reference_path[2, i - 1]
-
-                x0[3, i] = ds / self.dt0
-                x0[4, i] = dyaw / self.dt0
-                x0[5, i] = (ds / self.dt0 - last_v) / self.dt0
-                x0[6, i] = (dyaw / self.dt0 - last_omega) / self.dt0
-                x0[7, i] = ((ds / self.dt0 - last_v) / self.dt0 - last_a) / self.dt0
-
-            last_v = x0[3, i]
-            last_omega = x0[4, i]
-            last_a = x0[5, i]
-
-        if self.op_control0 is not None:
-            x0[3:, :] = self.op_control0
-
         return x0
 
     def init_model_reference_line(self, reference_path):
-        self.horizon = reference_path.shape[1]
+        # self.horizon = reference_path.shape[1]
         x0_ = self.states_initialization(reference_path)
 
         # initialize variables
@@ -280,25 +273,52 @@ class CasADi_MPC_differ:
         return op_dt, op_trajectories, op_controls
 
 
-if __name__ == '__main__':
-    start_time = time.time()
-    large = True
-    if large:
-        address = "../../config_OBCA_large.yaml"
-    else:
-        address = "../config_OBCA.yaml"
+def expand_path(refpath, ds):
+    x = refpath[0, :]
+    y = refpath[1, :]
+    sp = Spline2D(x, y)
+    s = np.arange(0, sp.s[-1], ds)
 
+    rx, ry, ryaw, rk = [], [], [], []
+
+    for i_s in s:
+        ix, iy = sp.calc_position(i_s)
+        rx.append(ix)
+        ry.append(iy)
+        yaw_ = sp.calc_yaw(i_s)
+        ryaw.append(yaw_)
+        yaw_last = yaw_
+        # rk.append(sp.calc_curvature(i_s))
+    return np.array([rx, ry, ryaw])
+
+
+def main():
+    start_time = time.time()
+
+    address = "../../config_OBCA_large.yaml"
     with open(address, 'r', encoding='utf-8') as f:
         param = yaml.load(f)
-
     ut = UTurnMPC()
     ut.set_parameters(param)
+
     # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
     cmpc = CasADi_MPC_differ()
+    ref_path, ob, obst = ut.initialize_saved_data()
+    # global_horizon, sum_s = cmpc.cal_global_Horizon(ref_path, dt)
 
-    ref_traj, ob, obst = ut.initialize_saved_data()
-    ut.use_differ_motion = True
+    cmpc.dt0 = dt
+    ref_traj = expand_path(ref_path, 0.8 * dt * cmpc.v_max)
+
+    cmpc.horizon = int(local_horizon / dt)
     cmpc.init_model_reference_line(ref_traj)
     op_dt, op_trajectories, op_controls = cmpc.get_result_reference_line()
-    print("OBCA total time:{:.3f}s".format(time.time() - start_time))
-    ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, ob)
+    print("ds:", dt * cmpc.v_max, " horizon after expasion:", len(ref_traj.T))
+    print("MPC total time:{:.3f}s".format(time.time() - start_time))
+    ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj)
+    ut.show_plot()
+
+if __name__ == '__main__':
+    dt = 0.01
+    local_horizon = 7
+    large = True
+    main()

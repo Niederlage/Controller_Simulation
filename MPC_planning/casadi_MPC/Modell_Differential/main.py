@@ -1,31 +1,26 @@
 import time
-
 import numpy as np
 import yaml
 from mpc_motion_plot import UTurnMPC
 from casadi_differ_reference_line import CasADi_MPC_differ
+from gears.cubic_spline_planner import Spline2D
 from MPC_planning.HybridAStar.hybrid_a_star import HybridAStar
 
 
-def hybrid_a_star_initialization(large):
-    if large:
-        address = "../../config_OBCA_large.yaml"
-    else:
-        address = "../config_OBCA.yaml"
+def hybrid_a_star_initialization(address):
+    # address = "../../config_OBCA_large.yaml"
     with open(address, 'r', encoding='utf-8') as f:
         param = yaml.load(f)
 
     coarse_planner = HybridAStar()
     coarse_planner.show_animation = False
+    start, goal, obst = coarse_planner.init_startpoints(address)
     sx = param["start"]
     ex = param["goal"]
     start = [sx[0], sx[1], np.deg2rad(sx[2])]
     goal = [ex[0], ex[1], np.deg2rad(ex[2])]
-    if large:
-        coarse_planner.car.set_parameters(param)
-
-    ob, obst, obst_points = get_all_obsts()
-    path = coarse_planner.hybrid_a_star_planning(start, goal, obst_points)
+    coarse_planner.car.set_parameters(param)
+    path = coarse_planner.hybrid_a_star_planning(start, goal, obst)
 
     if path is not None:
         x = path.x_list
@@ -35,73 +30,91 @@ def hybrid_a_star_initialization(large):
     else:
         saved_path = None
 
-    return saved_path, param, obst, ob
+    return saved_path, param, obst
 
 
-def get_bounds():
-    pa = [-10, -10]
-    pb = [20, 20]
+def expand_path(refpath, ds):
+    x = refpath[0, :]
+    y = refpath[1, :]
+    sp = Spline2D(x, y)
+    s = np.arange(0, sp.s[-1], ds)
 
-    edge = np.mgrid[pa[0]:pb[0]:0.1, pa[1]:pb[1]:0.1]
-    lx = edge[0, :, 0].flatten()
-    ly = edge[0, :, 0].flatten()
-    x_ = np.ones((len(lx),))
-    y_ = np.ones((len(ly),))
-    horizon_l = np.vstack((lx, pa[1] * x_))[:, :edge.shape[1]]
-    horizon_u = np.vstack((lx, pb[1] * x_))[:, :edge.shape[1]]
-    vertical_l = np.vstack((pa[0] * y_, ly))[:, :edge.shape[2]]
-    vertical_u = np.vstack((pb[0] * y_, ly))[:, :edge.shape[2]]
-    return np.block([horizon_l, horizon_u, vertical_l, vertical_u])
+    rx, ry, ryaw, rk = [], [], [], []
+
+    for i_s in s:
+        ix, iy = sp.calc_position(i_s)
+        rx.append(ix)
+        ry.append(iy)
+        yaw_ = sp.calc_yaw(i_s)
+        ryaw.append(yaw_)
+        # yaw_last = yaw_
+        # rk.append(sp.calc_curvature(i_s))
+    return np.array([rx, ry, ryaw])
 
 
-def get_all_obsts():
-    loadmap = np.load("../../data/saved_obmap.npz", allow_pickle=True)
-    ob1 = loadmap["pointmap"][0]
-    ob2 = loadmap["pointmap"][1]
-    ob3 = loadmap["pointmap"][2]
-    bounds = get_bounds()
-    obst_points = np.block([ob1.T, ob2.T, ob3.T, bounds])
-    ob = [ob1, ob2, ob3, bounds.T]
-    # obst_points = np.block([ob2.T, bounds])
-    # ob = ob2
+def normalize_angle(yaw):
+    return (yaw + np.pi) % (2 * np.pi) - np.pi
 
-    ob_constraint_mat = loadmap["constraint_mat"]
-    obst = []
-    obst.append(ob_constraint_mat[:4, :])
-    obst.append(ob_constraint_mat[4:8, :])
-    obst.append(ob_constraint_mat[8:12, :])
-    return ob, obst, obst_points
+
+def coordinate_transform(yaw, t, path, mode):
+    rot = np.array([[np.cos(yaw), -np.sin(yaw)],
+                    [np.sin(yaw), np.cos(yaw)]])
+    trans = np.repeat(t[:, None], len(path.T), axis=1)
+
+    if mode == "body to world":
+        newpath = rot @ path[:2, :] + trans
+        newyaw = path[2, :] + yaw
+    else:
+        newpath = rot.T @ (path[:2, :] - trans)
+        newyaw = path[2, :] - yaw
+
+    newyaw = [normalize_angle(i) for i in newyaw]
+
+    return np.vstack((newpath, newyaw))
 
 
 def main():
-    address = "../../config_OBCA_large.yaml"
+    address = "../../config_differ_smoother.yaml"
     load_file = False
-    large = True
+    dt = 0.05  # [s]
+    local_horizon = 20  # [s]
 
     if not load_file:
-        ref_traj, param, obst, ob_points = hybrid_a_star_initialization(large)
+        original_path, param, obst = hybrid_a_star_initialization(address)
+        ref_path = coordinate_transform(original_path[2, 0], original_path[:2, 0], original_path, mode="world to body")
 
-        if len(ref_traj.T) > 500:
-            ref_traj = None
+        if len(original_path.T) > 500:
+            original_path = None
 
-        if ref_traj is not None:
-
-            ut = UTurnMPC()
-            ut.set_parameters(param)
-            ut.reserve_footprint = True
+        if original_path is not None:
 
             start_time = time.time()
+            address = "../../config_differ_smoother.yaml"
+            with open(address, 'r', encoding='utf-8') as f:
+                param = yaml.load(f)
+            ut = UTurnMPC()
+            ut.set_parameters(param)
+
             # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
             cmpc = CasADi_MPC_differ()
+            cmpc.dt0 = dt
+            ref_traj = expand_path(ref_path, 0.8 * dt * cmpc.v_max)
+            cmpc.horizon = int(local_horizon / dt)
+            cmpc.v_end = cmpc.v_max
+            cmpc.omega_end = cmpc.omega_max
 
-            ref_traj, ob, obst = ut.initialize_saved_data()
             cmpc.init_model_reference_line(ref_traj)
             op_dt, op_trajectories, op_controls = cmpc.get_result_reference_line()
+            print("ds:", dt * cmpc.v_max, " horizon after expasion:", len(ref_traj.T))
+            print("MPC total time:{:.3f}s".format(time.time() - start_time))
 
-            print("warm up OBCA total time:{:.3f}s".format(time.time() - start_time))
-            np.savez("../../data/smoothed_traj_differ", dt=op_dt, traj=op_trajectories, control=op_controls, refpath=ref_traj)
+            op_path = coordinate_transform(original_path[2, 0], original_path[:2, 0], op_trajectories,
+                                           mode="body to world")
 
-            ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, ob_points, four_states=True)
+            np.savez("../../data/smoothed_traj_differ", dt=op_dt, traj=op_path, control=op_controls,
+                     refpath=original_path)
+            ut.plot_results(op_dt, op_path, op_controls, original_path)
+            ut.show_plot()
 
         else:
             print("Hybrid A Star initialization failed ....")
@@ -117,10 +130,11 @@ def main():
         ut = UTurnMPC()
         with open(address, 'r', encoding='utf-8') as f:
             param = yaml.load(f)
-        ob_points, obst, ob_array = get_all_obsts()
+
         ut.set_parameters(param)
         ut.reserve_footprint = True
-        ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, ob_points, four_states=True)
+        ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, four_states=True)
+        ut.show_plot()
 
 
 if __name__ == '__main__':

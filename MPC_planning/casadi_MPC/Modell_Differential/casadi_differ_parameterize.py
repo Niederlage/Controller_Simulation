@@ -8,17 +8,10 @@ import yaml
 
 class CasADi_MPC_differ:
     def __init__(self):
-        self.base = 2.
-        self.LF = 3.
-        self.LB = 1.
-        self.offset = (self.LF - self.LB) / 2
-
         self.nx = 10
         self.ng = 8
-        self.obst_num = 0
         self.horizon = 0
         self.dt0 = 0.1
-        self.model = None
         self.x_opt = None
         self.op_lambda0 = None
         self.op_mu0 = None
@@ -101,9 +94,12 @@ class CasADi_MPC_differ:
             # de = dt * (k1_de + 2 * k2_de + 2 * k3_de + k4_de) / 6
 
             s += ca.sqrt(ca.power(dx, 2) + ca.power(dy, 2))
-            dx_predict = 3 * cx[3] * ca.power(s, 2) + 2 * cx[2] * s + cx[1]
-            dy_predict = 3 * cy[3] * ca.power(s, 2) + 2 * cy[2] * s + cy[1]
-            py_ref = cy[3] * ca.power(s, 3) + cy[2] * ca.power(s, 2) + cy[1] * s + cy[0]
+            dx_predict = 5 * cx[5] * ca.power(s, 4) + 4 * cx[4] * ca.power(s, 3) + 3 * cx[3] * ca.power(s, 2) + 2 * cx[
+                2] * s + cx[1]
+            dy_predict = 5 * cy[5] * ca.power(s, 4) + 4 * cy[4] * ca.power(s, 3) + 3 * cy[3] * ca.power(s, 2) + 2 * cy[
+                2] * s + cy[1]
+            py_ref = cx[5] * ca.power(s, 5) + cx[4] * ca.power(s, 4) + cy[3] * ca.power(s, 3) + cy[
+                2] * ca.power(s, 2) + cy[1] * s + cy[0]
             pyaw_ref = ca.atan2(dy_predict, dx_predict)
 
             de_y = py_ref - (y_ + dy)
@@ -125,7 +121,7 @@ class CasADi_MPC_differ:
         ubx = ca.DM.zeros(self.nx, self.horizon)
         lbg = ca.DM.zeros(self.ng, self.horizon - 1)
         ubg = ca.DM.zeros(self.ng, self.horizon - 1)
-
+        k = 0
         for i in range(self.horizon):
             lbx[0, i] = -ca.inf
             lbx[1, i] = -ca.inf
@@ -149,15 +145,15 @@ class CasADi_MPC_differ:
             ubx[8, i] = self.lateral_error_max
             ubx[9, i] = self.heading_error_max
 
-        lbx[0, 0] = refpath[0, 0]
-        lbx[1, 0] = refpath[1, 0]
-        lbx[2, 0] = refpath[2, 0]
+        lbx[0, 0] = refpath[0, k]
+        lbx[1, 0] = refpath[1, k]
+        lbx[2, 0] = refpath[2, k]
         lbx[3, 0] = self.v0
         lbx[4, 0] = self.omega0
 
-        ubx[0, 0] = refpath[0, 0]
-        ubx[1, 0] = refpath[1, 0]
-        ubx[2, 0] = refpath[2, 0]
+        ubx[0, 0] = refpath[0, k]
+        ubx[1, 0] = refpath[1, k]
+        ubx[2, 0] = refpath[2, k]
         ubx[3, 0] = self.v0
         ubx[4, 0] = self.omega0
 
@@ -173,7 +169,7 @@ class CasADi_MPC_differ:
         ubx[3, -1] = self.v_end
         ubx[4, -1] = self.omega_end
 
-        lbg[:, :] = 0.
+        lbg[:, :] = -1e-5
         ubg[:, :] = 1e-5
 
         lbx_ = ca.reshape(lbx, -1, 1)
@@ -189,12 +185,13 @@ class CasADi_MPC_differ:
         sum_controls_rate = 0.
         sum_error = 0
         sum_turning_rate = 0.
-
+        sum_to_ref_vel = 0.
         # states: x, y, yaw, v, omega, a, omega_rate, jerk, lateral_error, heading_error
         for i in range(self.horizon):
+            sum_to_ref_vel += ca.power(x[3, i] - self.v_max, 2)
             sum_controls += ca.sumsqr(x[3:8, i])
             sum_error += ca.sumsqr(x[8:, i])
-            sum_turning_rate += ca.power(x[3, i] * x[4, i] - self.centripetal, 2)
+            sum_turning_rate += ca.power(x[3, i] * x[4, i], 2)
             if i > 0:
                 sum_states_rate += ca.sumsqr(x[:3, i] - x[:3, i - 1])
                 sum_controls_rate += ca.sumsqr(x[3:8, i] - x[3:8, i - 1])
@@ -202,8 +199,9 @@ class CasADi_MPC_differ:
         obj = self.wg[5] * sum_states_rate \
               + self.wg[5] * sum_controls \
               + self.wg[7] * sum_controls_rate \
-              + self.wg[9] * sum_error \
-              + self.wg[9] * sum_turning_rate
+              + self.wg[8] * sum_error \
+              + self.wg[1] * sum_turning_rate \
+              + self.wg[6] * sum_to_ref_vel
 
         return obj
 
@@ -273,8 +271,8 @@ if __name__ == '__main__':
     ref_traj, ob, obst = ut.initialize_saved_data()
     coeffx, coeffy, coefft, s0 = calco.cal_coefficient(ref_traj)
     ut.use_differ_motion = True
-    cmpc.dt0 = 0.1
-    cmpc.horizon = int(10 / cmpc.dt0)
+    cmpc.dt0 = 0.02
+    cmpc.horizon = int(5 / cmpc.dt0)
 
     cmpc.init_model_reference_line(coeffx, coeffy, ref_traj)
     op_trajectories, op_controls, op_error = cmpc.get_result_reference_line()

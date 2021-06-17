@@ -165,13 +165,7 @@ class Spline2D:
         k = (ddy * dx - ddx * dy) / ((dx ** 2 + dy ** 2) ** (3 / 2))
         return k
 
-    def mod_theta(self, theta, t_last=0):
-        if abs(theta - t_last) > np.pi / 2:
-            if np.sign(theta) > 0:
-                return theta - np.pi
-            else:
-                return theta + np.pi
-
+    def mod_angle(self, theta):
         return (theta + np.pi) % (2 * np.pi) - np.pi
 
     def calc_yaw(self, s):
@@ -180,7 +174,7 @@ class Spline2D:
         """
         dx = self.sx.calcd(s)
         dy = self.sy.calcd(s)
-        yaw = self.mod_theta(math.atan2(dy, dx))
+        yaw = self.mod_angle(math.atan2(dy, dx))
         return yaw
 
 
