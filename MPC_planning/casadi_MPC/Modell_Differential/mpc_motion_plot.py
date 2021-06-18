@@ -36,7 +36,6 @@ class UTurnMPC():
         self.W = param["W"]
 
     def normalize_angle(self, yaw):
-        # if abs(yaw) > 2 * np.pi:
         return (yaw + np.pi) % (2 * np.pi) - np.pi
 
     def differ_motion_model(self, zst, u_in, dt, Runge_Kutta=True):
@@ -109,19 +108,19 @@ class UTurnMPC():
             arrow_x, arrow_y, arrow_yaw = x, y, yaw
             self.plot_arrow(arrow_x, arrow_y, arrow_yaw)
 
-    def plot_op_controls(self, v_, acc_, jerk_, yaw_, omega_, omega_rate_):
+    def plot_op_controls(self, timeline, v_, acc_, jerk_, yaw_, omega_, omega_rate_):
         fig = plt.figure()
         ax = plt.subplot(211)
-        ax.plot(v_, label="v", color="red")
-        ax.plot(acc_, "-.", label="acc")
-        ax.plot(jerk_, "-.", label="jerk")
+        ax.plot(timeline, v_, label="v", color="red")
+        ax.plot(timeline, acc_, "-.", label="acc")
+        ax.plot(timeline, jerk_, "-.", label="jerk")
         ax.grid()
         ax.legend()
 
         ax = plt.subplot(212)
-        ax.plot(yaw_ * 180 / np.pi, label="heading/grad")
-        ax.plot(omega_ * 180 / np.pi, label="omega/grad")
-        ax.plot(omega_rate_ * 180 / np.pi, "-.", label="omega rate/grad")
+        ax.plot(timeline, yaw_ * 180 / np.pi, label="heading/grad")
+        ax.plot(timeline, omega_ * 180 / np.pi, label="omega/grad")
+        ax.plot(timeline, omega_rate_ * 180 / np.pi, "-.", label="omega rate/grad")
         ax.grid()
         ax.legend()
 
@@ -207,8 +206,8 @@ class UTurnMPC():
 
         return trajectory
 
-    def plot_results(self, op_dt, op_trajectories, op_controls, ref_traj, four_states=False):
-
+    def plot_results(self, op_dt, horizon, op_trajectories, op_controls, ref_traj, four_states=False):
+        timeline = np.arange(0, horizon, op_dt)
         self.predicted_trajectory = op_trajectories
         zst = ref_traj[:, 0]
         if self.use_loc_start:
@@ -239,7 +238,7 @@ class UTurnMPC():
             omega_rate_ = op_controls[3, :]
             jerk_ = op_controls[4, :]
 
-        self.plot_op_controls(v_, acc_, jerk_, yaw_, omega_, omega_rate_)
+        self.plot_op_controls(timeline, v_, acc_, jerk_, yaw_, omega_, omega_rate_)
 
         trajectory = self.try_tracking(zst, op_controls, trajectory, ref_traj=ref_traj)
 
@@ -269,15 +268,6 @@ class UTurnMPC():
         obst.append(ob_constraint_mat[8:12, :])
 
         return ref_traj, ob, obst
-
-    def get_car_shape(self):
-        Lev2 = (self.LB + self.LF) / 2
-        Wev2 = self.W / 2
-        car_outline = np.array(
-            [[-Lev2, Lev2, Lev2, -Lev2, -Lev2],
-             [Wev2, Wev2, -Wev2, -Wev2, Wev2]])
-
-        return cal_coeff_mat(car_outline.T)
 
 
 if __name__ == '__main__':

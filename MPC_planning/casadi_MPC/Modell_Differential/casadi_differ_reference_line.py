@@ -27,8 +27,8 @@ class CasADi_MPC_differ:
         self.wg = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 1e1, 1e2, 1e3]
         self.v_max = 2.
         self.omega_max = ca.pi * 40 / 180
-        self.a_max = 2.
-        self.omega_rate_max = ca.pi * 60 / 180
+        self.a_max = 1.
+        self.omega_rate_max = ca.pi * 120 / 180
         self.jerk_max = 3.
         self.lateral_error_max = 0.5
         self.heading_error_max = ca.pi * 40 / 180
@@ -113,7 +113,7 @@ class CasADi_MPC_differ:
 
         return g1
 
-    def init_bounds_reference_line(self, refpath):
+    def init_bounds_reference_line(self, start, refpath):
         lbx = ca.DM.zeros(self.nx, self.horizon)
         ubx = ca.DM.zeros(self.nx, self.horizon)
         lbg = ca.DM.zeros(self.ng, self.horizon - 1)
@@ -140,17 +140,17 @@ class CasADi_MPC_differ:
             ubx[7, i] = self.jerk_max  # jerk
             ubx[8, i] = self.lateral_error_max
 
-        lbx[0, 0] = refpath[0, 0]
-        lbx[1, 0] = refpath[1, 0]
-        lbx[2, 0] = refpath[2, 0]
-        lbx[3, 0] = self.v0
-        lbx[4, 0] = self.omega0
+        lbx[0, 0] = start[0]
+        lbx[1, 0] = start[1]
+        lbx[2, 0] = start[2]
+        lbx[3, 0] = start[3]
+        lbx[4, 0] = start[4]
 
-        ubx[0, 0] = refpath[0, 0]
-        ubx[1, 0] = refpath[1, 0]
-        ubx[2, 0] = refpath[2, 0]
-        ubx[3, 0] = self.v0
-        ubx[4, 0] = self.omega0
+        ubx[0, 0] = start[0]
+        ubx[1, 0] = start[1]
+        ubx[2, 0] = start[2]
+        ubx[3, 0] = start[3]
+        ubx[4, 0] = start[4]
 
         lbx[0, -1] = refpath[0, -1]
         lbx[1, -1] = refpath[1, -1]
@@ -222,17 +222,21 @@ class CasADi_MPC_differ:
         N = int(1.4 * (sum_s / self.v_max + self.v_max / self.a_max) / dt_)
         return N, sum_s
 
-    def states_initialization(self, reference_path):
+    def states_initialization(self, start, reference_path):
         x0 = ca.DM(self.nx, self.horizon)
         for i in range(self.horizon):
             x0[0, i] = reference_path[0, i]
             x0[1, i] = reference_path[1, i]
             x0[2, i] = reference_path[2, i]
+
+        x0[0, 0] = start[0]
+        x0[1, 0] = start[1]
+        x0[2, 0] = start[2]
         return x0
 
-    def init_model_reference_line(self, reference_path):
+    def init_model_reference_line(self, start, reference_path):
         # self.horizon = reference_path.shape[1]
-        x0_ = self.states_initialization(reference_path)
+        x0_ = self.states_initialization(start, reference_path)
 
         # initialize variables
         x = ca.SX.sym("x", self.nx, self.horizon)  # (x, y, theta, v, steer, a, steer_rate, jerk, e, psi)
@@ -250,27 +254,26 @@ class CasADi_MPC_differ:
         nlp = {"x": X, "f": F, "g": G}
         opts_setting = {"expand": True,
                         "ipopt.hessian_approximation": "exact",
-                        'ipopt.max_iter': 200,
-                        'ipopt.print_level': 3,
-                        'print_time': 1,
+                        'ipopt.max_iter': 100,
+                        'ipopt.print_level': 0,
+                        'print_time': 0,
                         'ipopt.acceptable_tol': 1e-8,
                         'ipopt.acceptable_obj_change_tol': 1e-6}
 
         Sol = ca.nlpsol('S', 'ipopt', nlp, opts_setting)
 
-        XL, XU, GL, GU = self.init_bounds_reference_line(x0_)
+        XL, XU, GL, GU = self.init_bounds_reference_line(start, x0_)
         X0 = ca.reshape(x0_, -1, 1)
 
         result = Sol(x0=X0, lbx=XL, ubx=XU, lbg=GL, ubg=GU)
         self.x_opt = result["x"]
 
     def get_result_reference_line(self):
-        op_dt = float(self.dt0)
         cal_traj = ca.reshape(self.x_opt, self.nx, self.horizon)
         op_controls = np.array(cal_traj[3:, :])
         op_trajectories = np.array(cal_traj[:3, :])
 
-        return op_dt, op_trajectories, op_controls
+        return op_trajectories, op_controls
 
 
 def expand_path(refpath, ds):
@@ -306,19 +309,21 @@ def main():
     ref_path, ob, obst = ut.initialize_saved_data()
     # global_horizon, sum_s = cmpc.cal_global_Horizon(ref_path, dt)
 
+    start = [ref_path[0, 0], ref_path[1, 0], ref_path[2, 0], 0.5, 0.5]
     cmpc.dt0 = dt
     ref_traj = expand_path(ref_path, 0.8 * dt * cmpc.v_max)
 
     cmpc.horizon = int(local_horizon / dt)
-    cmpc.init_model_reference_line(ref_traj)
-    op_dt, op_trajectories, op_controls = cmpc.get_result_reference_line()
+    cmpc.init_model_reference_line(start, ref_traj)
+    op_trajectories, op_controls = cmpc.get_result_reference_line()
     print("ds:", dt * cmpc.v_max, " horizon after expasion:", len(ref_traj.T))
     print("MPC total time:{:.3f}s".format(time.time() - start_time))
-    ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj)
+    ut.plot_results(dt, local_horizon, op_trajectories, op_controls, ref_traj)
     ut.show_plot()
 
+
 if __name__ == '__main__':
-    dt = 0.01
-    local_horizon = 7
+    dt = 0.05
+    local_horizon = 5
     large = True
     main()
