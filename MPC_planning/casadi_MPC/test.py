@@ -1,10 +1,18 @@
-import casadi as ca
+import os
+import time
 
-x = ca.SX.sym("x", 2, 5)
-print(ca.sumsqr(x[0, :]))
-l = ca.SX.sym("l", 3, 5)
-v = ca.vertcat(x, l)
-print(v.size())
-t = ca.reshape(v.T, -1, 1)
-print(t.size()[0])
-print(ca.fmin(0, 1))
+from multiprocessing import Process
+
+
+def run_proc(name):
+    print('子进程运行中，name%s,pin=%d...' % (name, os.getpid()))
+
+    time.sleep(10)
+    print('子进程已经结束')
+
+
+if __name__ == '__main__':
+    print('父进程%d.' % os.getpid())
+    p = Process(target=run_proc, args=('test',))
+    print('子进程将要执行')
+    p.start()

@@ -36,7 +36,7 @@ class LQR_Controller:
     def __init__(self):
         # LQR parameter
         # ed, edv, eth, edth, ev
-        self.lqr_Q = np.diag([2e2, 1e1, 1e2, 1e1, 1e1]) * 1e0
+        self.lqr_Q = np.diag([2e2, 1e1, 1e2, 1e2, 1e1]) * 1e0
         # self.lqr_Q = np.diag([1e0, 1e0, 1e0, 1e0, 1e0, 1e0, 1e0]) * 1e0
         self.lqr_R = np.diag([1e0, 1e0]) * 1e-0
         self.dt = 0.1  # time tick[s]
@@ -44,18 +44,19 @@ class LQR_Controller:
         self.max_v = 2.0
         self.max_omega = np.deg2rad(45.0)  # maximum steering angle[rad]
         self.max_acc = 1.
-        self.ind_forward = 3
+        self.max_omega_rate = np.deg2rad(120.0)  # maximum steering angle[rad]
+        self.ind_forward = 0
 
     def update(self, state, a_, delta_, use_RungeKutta=False):
-        if delta_ >= self.max_omega:
-            delta_ = self.max_omega
-        if delta_ <= - self.max_omega:
-            delta_ = - self.max_omega
-
-        if a_ >= self.max_v:
-            a_ = self.max_v
-        if delta_ <= - self.max_v:
-            a_ = - self.max_v
+        # if delta_ >= self.max_omega:
+        #     delta_ = self.max_omega
+        # if delta_ <= - self.max_omega:
+        #     delta_ = - self.max_omega
+        #
+        # if a_ >= self.max_v:
+        #     a_ = self.max_v
+        # if delta_ <= - self.max_v:
+        #     a_ = - self.max_v
 
         if use_RungeKutta:
 
@@ -102,10 +103,10 @@ class LQR_Controller:
             state.x = state.x + state.v * math.cos(state.yaw) * self.dt + noise[0] * 0
             state.y = state.y + state.v * math.sin(state.yaw) * self.dt + noise[1] * 0
             state.yaw = self.pi_2_pi(state.yaw + state.omega * self.dt) + noise[2] * 0.
-            state.v = a_
-            state.omega = delta_
-            # state.v = state.v + a_ * self.dt + noise[3] * 0.5
-            # state.omega = state.omega + delta_ * self.dt
+            # state.v = a_
+            # state.omega = delta_
+            state.v = state.v + a_ * self.dt + noise[3] * 0.
+            state.omega = state.omega + delta_ * self.dt
             # state.omega = delta_ + noise[4]
 
         return state
@@ -216,11 +217,19 @@ class LQR_Controller:
 
         # input vector
         ustar = -K @ x
-        omega = (ustar[0, 0] + omega_rate_forward) * self.dt + omega_forward
-        vel = (ustar[1, 0] + a_forward) * self.dt + v_forward
+        domega = ustar[0, 0] + omega_rate_forward
+        dv = ustar[1, 0] + a_forward
+        if abs(dv) > self.max_acc:
+            dv = self.max_acc * dv / abs(dv)
+        if abs(domega) > self.max_omega_rate:
+            domega = self.max_omega_rate * domega / abs(domega)
+        omega = domega * self.dt
+        vel = dv * self.dt
+        # omega = domega
+        # vel = dv
         # print("ed:{:.3f}, eth:{:.3f}".format(e_d, e_th))
 
-        return vel, omega, ind, e_d, e_th
+        return vel, omega, ind, e_d, e_th, v_forward, omega_forward
 
     def lqr_speed_steering_control2(self, state, cx, cy, cyaw, op_inputs, pe, s_ed, s_eth):
         Kp_e = 1.1
@@ -357,11 +366,12 @@ class LQR_Controller:
             if target_ind > len(op_inputs.T - self.ind_forward):
                 print("reach input profile end!")
                 break
-            u_v, u_o, target_ind, e, e_th = self.lqr_speed_steering_control(state, cx, cy, cyaw, op_inputs, e, e_th)
+            u_v, u_o, target_ind, e, e_th, v_ref, o_ref = self.lqr_speed_steering_control(state, cx, cy, cyaw,
+                                                                                          op_inputs, e, e_th)
             # dl, ai, target_ind, e, s_e, s_eth = self.lqr_speed_steering_control2(state, cx, cy, cyaw, op_inputs, e, s_e,
             #                                                                      s_eth)
+            # state = self.update(state, u_v + v_ref, u_o + o_ref)
             state = self.update(state, u_v, u_o)
-
             if abs(state.v) <= stop_speed:
                 target_ind += 1
 

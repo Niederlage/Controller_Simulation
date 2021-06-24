@@ -236,6 +236,7 @@ def iterative_linear_mpc_control(xref, x0, dref, oa, od):
         oa, od, ox, oy, oyaw, ov = linear_mpc_control(xref, xbar, x0, dref)
         du = sum(abs(oa - poa)) + sum(abs(od - pod))  # calc u change value
         if du <= DU_TH:
+            print("iter num:", i)
             break
     else:
         print("Iterative is max iter")
@@ -625,5 +626,5 @@ def main2():
 
 
 if __name__ == '__main__':
-    # main()
-    main2()
+    main()
+    # main2()
