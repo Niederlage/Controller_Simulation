@@ -162,15 +162,15 @@ class CasADi_MPC_WarmUp:
         F = self.init_objects_warmup(lambda_, d_, obst_m)
 
         qp = {"x": X, "f": F, "g": G}
-        opts_setting = {"expand": True,
-                        "ipopt.hessian_approximation": "limited-memory",
-                        'ipopt.max_iter': 200,
-                        'ipopt.print_level': 0,
-                        'print_time': 0,
-                        'ipopt.acceptable_tol': 1e-8,
-                        'ipopt.acceptable_obj_change_tol': 1e-6}
+        # opts_setting = {"expand": True,
+        #                 "ipopt.hessian_approximation": "limited-memory",
+        #                 'ipopt.max_iter': 200,
+        #                 'ipopt.print_level': 0,
+        #                 'print_time': 0,
+        #                 'ipopt.acceptable_tol': 1e-8,
+        #                 'ipopt.acceptable_obj_change_tol': 1e-6}
 
-        Sol = ca.nlpsol('S', 'ipopt', qp, opts_setting)
+        Sol = ca.qpsol('S', 'qpoases', qp)
 
         result = Sol(x0=X0, lbx=XL, ubx=XU, lbg=GL, ubg=GU)
         self.d_opt = result["x"]

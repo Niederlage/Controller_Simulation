@@ -1,6 +1,6 @@
-base: 2.0
-LF: 3.0
-LB: 1.0
+base: 3.0
+LF: 3.8
+LB: 1.
 W: 2.0
 
 start:

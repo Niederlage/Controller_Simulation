@@ -17,8 +17,8 @@ class MPC_LQR_Controller:
         self.LB = 2.  # distance from rear to vehicle back end
         self.W = 2.
 
-        self.dt = 0.05
-        self.local_horizon = 4
+        self.dt = 0.02
+        self.local_horizon = 2
         self.window = int(self.local_horizon / self.dt)
         self.state_num = 5
         self.GOAL_DIS = 5.5  # goal distance
@@ -27,9 +27,9 @@ class MPC_LQR_Controller:
 
         self.max_v = 2.0
         self.max_omega = np.deg2rad(120.0)  # maximum steering angle[rad]
-        self.max_acc = 10.0
-        self.max_omega_rate = np.deg2rad(120.0)  # maximum steering angle[rad]
-        self.ds = 0.4 * self.dt * self.max_v
+        self.max_acc = 2.0
+        self.max_omega_rate = np.deg2rad(720.0)  # maximum steering angle[rad]
+        self.ds = 0.5 * self.dt * self.max_v
 
         # iterative paramter
         self.MAX_ITER = 3  # Max iteration
@@ -195,56 +195,13 @@ class MPC_LQR_Controller:
         else:
             return np.vstack([op_traj, op_control])
 
-    def motion_prediction(self, x0, oa, od, xref):
-
-        xbar = xref * 0.0
-        for i, _ in enumerate(x0):
-            xbar[i, 0] = x0[i]
-
-        state = self.State(x=x0[0], y=x0[1], yaw=x0[2], v=x0[3], omega=x0[4])
-        for (ai, di, i) in zip(oa, od, range(1, 5 + 1)):
-            state = self.update_state(state, ai, di)
-            xbar[0, i] = state.x
-            xbar[1, i] = state.y
-            xbar[2, i] = state.yaw
-            xbar[3, i] = state.v
-            xbar[4, i] = state.omega
-
-            return xbar
-
-    def iterative_linear_mpc_control(self, xref, x0, oa, od):
-        """
-        MPC contorl with updating operational point iteraitvely
-        """
-
-        if oa is None or od is None:
-            oa = [0.0] * 5
-            od = [0.0] * 5
-
-        mpc = CasADi_MPC_differ_Control()
-
-        for i in range(self.MAX_ITER):
-            xbar = self.motion_prediction(x0, oa, od, xref)
-            poa, pod = oa[:], od[:]
-
-            mpc.init_model_controller(x0, xbar - xref)
-            op_traj = mpc.get_mpc_result()
-            op_path = op_traj[:3, :]
-            oa = op_traj[5, :]
-            od = op_traj[6, :]
-            du = sum(np.abs(oa - poa)) + sum(np.abs(od - pod))  # calc u change value
-            if du <= self.DU_TH:
-                print("iter num:", i)
-                break
-        else:
-            print("Iterative is max iter")
-
-        return oa, od
-
     def linear_error_mpc_control(self, index, xref, x0):
         mpc = CasADi_MPC_differ_Control()
         ex0 = x0 - xref[:5, index]
-        mpc.init_model_controller_iterative(index, ex0, xref)
+        mpc.dt0 = self.dt
+        mpc.horizon = 5
+        mpc.init_model_controller_conic(index, ex0, xref)
+        # mpc.init_model_controller_qpsol(index, ex0, xref)
         op_traj = mpc.get_mpc_result()
 
         oa = op_traj[0, :]
@@ -306,24 +263,6 @@ class MPC_LQR_Controller:
         # xref = self.expand_path(xref, self.ds)
         return xref, ind
 
-    def controller(self, state, op_inputs, local_path, e, e_th):
-        # if target_ind > len(op_inputs.T - self.ind_forward):
-        #     print("reach input profile end!")
-        #     break
-        cx = local_path[0, :]
-        cy = local_path[1, :]
-        cyaw = local_path[2, :]
-        u_v, u_o, target_ind, e, e_th, v_ref, o_ref = self.lqr.lqr_speed_steering_control(state, cx, cy, cyaw,
-                                                                                          op_inputs, e, e_th)
-        self.ref_v.append(v_ref)
-        self.ref_omega.append(o_ref)
-        state = self.update_state(state, u_v + v_ref, u_o + o_ref)
-
-        if abs(state.v) <= self.STOP_SPEED:
-            target_ind += 1
-
-        return state, e, e_th
-
     def do_simulation(self, global_path, initial_state):
         """
         Simulation
@@ -354,7 +293,7 @@ class MPC_LQR_Controller:
         planlist = []
         target_ind, _ = self.calc_nearest_index(state, global_path, 0)
         # cyaw = smooth_yaw(cyaw)
-        alpha = 0.15
+        alpha = 0.3
         tick = int(alpha * self.window)
         vm, om = None, None
 
@@ -613,9 +552,9 @@ def main():
         # global_path = mpclqr.expand_path(raw_course, 0.05)
         global_path = mpclqr.expand_path(raw_course, mpclqr.ds)
         ran = np.random.rand(5)
-        x0_ = global_path[0, 0] - 0.5 * 1
-        y0_ = global_path[1, 0] - 0.5 * 1
-        yaw0_ = global_path[2, 0] + ran[2] * 0.1 * 1
+        x0_ = global_path[0, 0] - 2.5 * 1
+        y0_ = global_path[1, 0] - .5 * 1
+        yaw0_ = global_path[2, 0] + ran[2] * 1
         v0_ = 0.
         omega0_ = 0.
 

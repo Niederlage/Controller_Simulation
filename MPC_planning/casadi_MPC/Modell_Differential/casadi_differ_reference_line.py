@@ -27,9 +27,9 @@ class CasADi_MPC_differ:
         self.wg = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 1e1, 1e2, 1e3]
         self.v_max = 2.
         self.omega_max = ca.pi * 120 / 180
-        self.a_max = 10.
-        self.omega_rate_max = ca.pi * 120 / 180
-        self.jerk_max = 30.
+        self.a_max = 2.
+        self.omega_rate_max = ca.pi * 720 / 180
+        self.jerk_max = 3.
 
         self.v0 = 0.
         self.omega0 = 0.
@@ -139,8 +139,8 @@ class CasADi_MPC_differ:
             ubx[0, i] = ca.inf
             ubx[1, i] = ca.inf
             ubx[2, i] = ca.pi  # th
-            # ubx[3, i] = ca.sqrt(1.414 * self.a_max / (1.183 * refpath[3, i] + 1e-5))  # v
-            ubx[3, i] = self.v_max  # v
+            ubx[3, i] = ca.sqrt(1.414 * self.a_max / (1.183 * refpath[3, i] + 1e-5))  # v
+            # ubx[3, i] = self.v_max  # v
             ubx[4, i] = self.omega_max  # omega
             ubx[5, i] = self.a_max  # a
             ubx[6, i] = self.omega_rate_max  # omega_rate
@@ -205,7 +205,7 @@ class CasADi_MPC_differ:
         sum_a = 0.
 
         for i in range(self.horizon):
-            sum_to_ref_vel += ca.power(x[3, i] - 0.8 * self.v_max, 2)
+            sum_to_ref_vel += ca.power(x[3, i] - 1.5 * self.v_max, 2)
             sum_v += ca.sumsqr(x[3, i])
             sum_omega += ca.sumsqr(x[4, i])
             sum_dist_to_ref += ca.sumsqr(x[:3, i] - ref_path[:3, i])

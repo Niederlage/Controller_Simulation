@@ -15,7 +15,7 @@ from scipy.spatial import cKDTree
 try:
     from dynamic_programming_heuristic import DynamicProgrammingHeuristic
     from reeds_shepp_path_planning import ReedsSheppPathPlanning
-    from car import CarModel
+    from CarModell.AckermannCar import AckermannCarModel
     from auxiliaries import Node, Path, Config
 except Exception:
     raise
@@ -25,17 +25,17 @@ class HybridAStar:
     def __init__(self):
         self.XY_GRID_RESOLUTION = 1  # [ m / grid]
         self.YAW_GRID_RESOLUTION = np.deg2rad(5.0)  # [rad/ grid]
-        self.MOTION_RESOLUTION = 0.2  # [m/ grid] path interpolate resolution
+        self.MOTION_RESOLUTION = 0.5  # [m/ grid] path interpolate resolution
         self.N_STEER = 10  # number of steer command
-        self.ROBOT_RADIUS = 1.0  # robot radius
+        self.ROBOT_RADIUS = 0.8  # robot radius
 
-        self.SB_COST = 5.0  # switch back penalty cost
+        self.SB_COST = 1.0  # switch back penalty cost
         self.BACK_COST = 1e7  # backward penalty cost
         self.STEER_CHANGE_COST = 1.0  # steer angle change penalty cost
         self.STEER_COST = 10.0  # steer angle change penalty cost
         self.H_COST = 15.0  # Heuristic cost
         self.rs = ReedsSheppPathPlanning()
-        self.car = CarModel()
+        self.car = AckermannCarModel()
         self.dph = DynamicProgrammingHeuristic()
         self.show_animation = True
 
@@ -322,8 +322,8 @@ class HybridAStar:
         return ind
 
     def get_bounds(self):
-        pa = [-10, -10]
-        pb = [20, 20]
+        pa = [-15, -25]
+        pb = [15, 25]
 
         edge = np.mgrid[pa[0]:pb[0]:0.1, pa[1]:pb[1]:0.1]
         lx = edge[0, :, 0].flatten()
@@ -336,15 +336,16 @@ class HybridAStar:
         vertical_u = np.vstack((pb[0] * y_, ly))[:, :edge.shape[2]]
         return np.block([horizon_l, horizon_u, vertical_l, vertical_u])
 
-    def generate_obmap(self, loadmap=False):
+    def generate_obmap(self, loadmap=True):
         if loadmap:
             load = np.load("../data/saved_obmap.npz", allow_pickle=True)
-            v1 = load["pointmap"][0]
-            v2 = load["pointmap"][1]
-            v3 = load["pointmap"][2]
+            samples = np.zeros((1, 2))
+            for i, ob in enumerate(load["pointmap"]):
+                samples = np.vstack((samples, ob))
             # return np.block([v1.T, v2.T, v3.T])
-            bounds = self.get_bounds()
-            return np.block([v1.T, v2.T, v3.T, bounds])
+            samples = np.delete(samples, 0, axis=0)
+            bounds = self.get_bounds().T
+            return np.vstack([samples, bounds]).T
         else:
             ox, oy = [], []
             for i in range(10):
@@ -394,7 +395,7 @@ class HybridAStar:
             # Set Initial parameters
             start = [10.0, 10.0, np.deg2rad(90.0)]
             goal = [20.0, 45.0, np.deg2rad(0.0)]
-        loadmap = False
+        # loadmap = False
         obst = self.generate_obmap(loadmap=loadmap)
 
         print("start : ", start)
@@ -432,19 +433,23 @@ def main():
     planner.save_planned_path(path, planner, obst)
 
     if planner.show_animation:
+        k = 0
         for i_x, i_y, i_yaw in zip(path.x_list, path.y_list, path.yaw_list):
-            plt.cla()
+            # plt.cla()
             plt.plot(obst[0], obst[1], ".k")
             plt.plot(path.x_list, path.y_list, "-r", label="Hybrid A* path")
             plt.grid(True)
             plt.axis("equal")
             planner.car.plot_car(i_x, i_y, i_yaw)
-            plt.pause(0.0001)
+            k += 1
+            if k % 10 == 0:
+                plt.pause(0.001)
 
     print(__file__ + " done!!")
     plt.show()
 
 
 if __name__ == '__main__':
-    address = "../config_differ_smoother.yaml"
+    # address = "../config_differ_smoother.yaml"
+    address = "../config_OBCA_large.yaml"
     main()

@@ -14,7 +14,7 @@ from MPC_planning.HybridAStar.hybrid_a_star import HybridAStar
 
 def hybrid_a_star_initialization(large):
     if large:
-        address = "../config_OBCA_large.yaml"
+        address = "../../config_OBCA_large.yaml"
     else:
         address = "../config_OBCA.yaml"
     with open(address, 'r', encoding='utf-8') as f:
@@ -59,6 +59,10 @@ def get_bounds():
     return np.block([horizon_l, horizon_u, vertical_l, vertical_u])
 
 
+def normalize_angle(yaw):
+    return (yaw + np.pi) % (2 * np.pi) - np.pi
+
+
 def expand_path(refpath, ds):
     x = refpath[0, :]
     y = refpath[1, :]
@@ -73,14 +77,13 @@ def expand_path(refpath, ds):
         rx.append(ix)
         ry.append(iy)
         yaw_ = sp.calc_yaw(i_s)
-        ryaw.append(yaw_)
-        yaw_last = yaw_
+        ryaw.append(normalize_angle(yaw_))
         # rk.append(sp.calc_curvature(i_s))
     return np.array([rx, ry, ryaw])
 
 
 def get_all_obsts():
-    loadmap = np.load("../data/saved_obmap.npz", allow_pickle=True)
+    loadmap = np.load("../../data/saved_obmap.npz", allow_pickle=True)
     ob1 = loadmap["pointmap"][0]
     ob2 = loadmap["pointmap"][1]
     ob3 = loadmap["pointmap"][2]
@@ -96,23 +99,6 @@ def get_all_obsts():
     obst.append(ob_constraint_mat[:4, :])
     obst.append(ob_constraint_mat[8:12, :])
     return ob, obst, obst_points
-
-
-def run_HOBCA_mpc(ref_traj, shape, obst):
-    warmup_time = time.time()
-    # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
-    warmup_qp = CasADi_MPC_WarmUp()
-    warmup_qp.init_model_warmup(ref_traj, shape, obst)
-    op_dist, op_lambda, op_mu = warmup_qp.get_result_warmup()
-    print("warm up time:{:.3f}s".format(time.time() - warmup_time))
-
-    obca = CasADi_MPC_OBCA()
-    obca.op_lambda0 = op_lambda
-    obca.op_mu0 = op_mu
-    obca.init_model_OBCA(ref_traj, shape, obst)
-    op_dt, op_trajectories, op_controls, op_lambda, op_mu = obca.get_result_OBCA()
-
-    return op_dt, op_trajectories, op_controls
 
 
 def run_segment_OBCA_mpc(param, ref_traj, shape, obst):
@@ -160,18 +146,21 @@ def run_TDROBCA_mpc(param, ref_traj, shape, obst):
     # ref_traj, kappa, vl, vm = pathonly.get_result_OBCA()
 
     # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
-    warmup_qp = CasADi_MPC_WarmUp()
-    warmup_qp.set_parameters(param)
-    warmup_qp.init_model_warmup(ref_traj, shape, obst)
-    op_dist, op_lambda, op_mu = warmup_qp.get_result_warmup()
-    print("warm up time:{:.3f}s".format(time.time() - warmup_time))
+    # warmup_qp = CasADi_MPC_WarmUp()
+    # warmup_qp.set_parameters(param)
+    # warmup_qp.init_model_warmup(ref_traj, shape, obst)
+    # op_dist, op_lambda, op_mu = warmup_qp.get_result_warmup()
+    # print("warm up time:{:.3f}s".format(time.time() - warmup_time))
 
     obca = CasADi_MPC_TDROBCA()
-    obca.get_dt(ref_traj)
+    # obca.get_dt(ref_traj)
+    obca.dt0 = 0.1
+    # ref_traj = expand_path(ref_traj, 0.5 * obca.dt0 * obca.v_max)
+    ref_traj = expand_path(ref_traj, 0.1)
     obca.set_parameters(param)
-    obca.op_lambda0 = op_lambda
-    obca.op_mu0 = op_mu
-    obca.op_d0 = op_dist
+    # obca.op_lambda0 = op_lambda
+    # obca.op_mu0 = op_mu
+    # obca.op_d0 = op_dist
     obca.init_model_OBCA(ref_traj, shape, obst)
     op_dt, op_trajectories, op_controls, op_lambda, op_mu = obca.get_result_OBCA()
 
@@ -187,29 +176,23 @@ def main():
     ds = 0.1
 
     if not load_file:
-        ref_path, param, obst, ob_points = hybrid_a_star_initialization(large)
-        ref_traj = expand_path(ref_path, ds)
+        ref_traj, param, obst, ob_points = hybrid_a_star_initialization(large)
         # ref_traj = ref_path
-        if len(ref_path.T) > 500:
+        if len(ref_traj.T) > 500:
             ref_traj = None
 
         if ref_traj is not None:
 
             ut = UTurnMPC()
-            ut.set_parameters(param)
             ut.reserve_footprint = True
             shape = ut.get_car_shape()
 
             start_time = time.time()
 
-            if HOBCA_mpc:
-                op_dt, op_trajectories, op_controls = run_HOBCA_mpc(ref_traj, shape, obst)
-
+            if try_segment:
+                op_dt, op_trajectories, op_controls = run_segment_OBCA_mpc(param, ref_traj, shape, obst)
             else:
-                if try_segment:
-                    op_dt, op_trajectories, op_controls = run_segment_OBCA_mpc(param, ref_traj, shape, obst)
-                else:
-                    op_dt, op_trajectories, op_controls = run_TDROBCA_mpc(param, ref_traj, shape, obst)
+                op_dt, op_trajectories, op_controls = run_TDROBCA_mpc(param, ref_traj, shape, obst)
 
             print("warm up OBCA total time:{:.3f}s".format(time.time() - start_time))
             # np.savez("../data/smoothed_traj", dt=op_dt, traj=op_trajectories, control=op_controls, refpath=ref_traj)
@@ -228,10 +211,7 @@ def main():
 
         print("load file to check!")
         ut = UTurnMPC()
-        with open(address, 'r', encoding='utf-8') as f:
-            param = yaml.load(f)
         ob_points, obst, ob_array = get_all_obsts()
-        ut.set_parameters(param)
         ut.reserve_footprint = True
         ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, ob_points, four_states=True)
 

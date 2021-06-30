@@ -7,6 +7,7 @@ def cal_coeff_mat(vertices):
     if edges <= 3:
         print("invalid! vertices <= 2")
         return None
+
     if np.all(vertices[0] == vertices[-1]):
         coeff = []
 
@@ -85,9 +86,12 @@ def get_polygon_map(use_sample_test=False, large=True):
 
         tf_1 = np.array([13.5, 0, 0])
         obst2 = Euclidean_Transform(obst1, tf_1)
-        tf_2 = np.array([31 / 10, 1.])[:, None]
+        tf_2 = np.array([15 / 10, 0.5])[:, None]
         obst3 = np.copy(Scale_Transformation(obst1, tf_2))
-        obst3 = Euclidean_Transform(obst3, np.array([21, 10, 0]))
+        obst3 = Euclidean_Transform(obst3, np.array([10, 10, 0]))
+        tf_3 = np.array([12 / 10, 1.])[:, None]
+        obst4 = np.copy(Scale_Transformation(obst1, tf_3))
+        obst4 = Euclidean_Transform(obst4, np.array([5, 18, 0]))
 
     else:
         obst1 = np.array([[0, 1.5],
@@ -102,7 +106,7 @@ def get_polygon_map(use_sample_test=False, large=True):
         obst3 = np.copy(Scale_Transformation(obst1, tf_2))
         obst3 = Euclidean_Transform(obst3, np.array([0, 3, 0]))
     # obst3 = Scale_Transformation(obst3, np.array([0.6, 1.1]))
-    obst_ = [obst1, obst2, obst3]
+    obst_ = [obst1, obst2, obst3, obst4]
     samplelist = []
 
     if use_sample_test:
@@ -112,10 +116,10 @@ def get_polygon_map(use_sample_test=False, large=True):
             samplelist.append(sample)
         samples = np.block([samplelist[0].T, samplelist[1].T, samplelist[2].T]).T
     else:
-        for ob_i in obst_:
+        samples = np.zeros((4 * len(obst_), 3))
+        for i, ob_i in enumerate(obst_):
             coeff_mat = cal_coeff_mat(ob_i)
-            samplelist.append(coeff_mat)
-        samples = np.block([samplelist[0].T, samplelist[1].T, samplelist[2].T]).T
+            samples[4 * i: 4 * (i + 1), :] = coeff_mat
 
     return obst_, samples
 
@@ -166,10 +170,16 @@ if __name__ == '__main__':
     else:
         sample_test = True
 
-    car = np.array([[0.4, -0.4, -0.4, 0.4, 0.4], [0.3, 0.3, -0.3, -0.3, 0.3]])
+    # car = np.array([[0.4, -0.4, -0.4, 0.4, 0.4], [0.3, 0.3, -0.3, -0.3, 0.3]])
 
     obmap, samples = get_polygon_map(use_sample_test=sample_test)
-    pointmap = get_point_map(obmap, 0.1)
+    # idx = []
+    # for i in range(12):
+    #     if i % 4 == 0 or i % 4 == 1:
+    #         idx.append(i)
+    # samples = samples[idx, :]
+
+    pointmap = get_point_map(obmap, 0.2)
 
     if save_map:
         pointmap_ = np.array(pointmap, dtype=object)
@@ -187,8 +197,8 @@ if __name__ == '__main__':
             print("no samples found!")
 
     if plot_obmap:
-        shape = cal_coeff_mat(car.T)
-        car_sample = monte_carlo_sample_test(shape)
+        # shape = cal_coeff_mat(car.T)
+        # car_sample = monte_carlo_sample_test(shape)
         # ax.plot(car[0], car[1], "-", color="purple")
         # ax.plot(car_sample[:, 0], car_sample[:, 1], "o", color="orange")
         for ob_ in obmap:
