@@ -136,7 +136,7 @@ def pixel2coordinates(edges, resolution, xmax, ymax):
 if __name__ == '__main__':
 
     convert2coordinates = True
-    file = "fig1.png"
+    file = "../obstacles/fig1.png"
     edges_list = get_rough_coordinates(file)
     print("size edge list:", len(edges_list))
     img = cv2.imread(file, 0)

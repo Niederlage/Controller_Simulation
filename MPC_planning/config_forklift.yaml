@@ -1,16 +1,16 @@
-base: 3.0
-LF: 3.8
+base: 2.0
+LF: 3.
 LB: 1.
 W: 2.0
-
+use_model_type: forklift
 start:
-  - -8.5  # x end   - -7.5  # x end
+  - 6.5  # x end   - -7.5  # x end
   - 7.8 # y end - 7.5 # y end
-  - 0. # theta end - 0. # theta end
+  - 90. # theta end - 0. # theta end
 goal: # goal with angle
-  - 3.  # x end - -0.8  # x end
-  - -3 # y end - 1.5 # y end
-  - 0. # theta end   - 90. # theta end
+  - 8.5  # x end - -0.8  # x end
+  - 16. # y end - 1.5 # y end
+  - 180. # theta end   - 90. # theta end
 ref_v: 1.5
 dt: 0.1
 wg:

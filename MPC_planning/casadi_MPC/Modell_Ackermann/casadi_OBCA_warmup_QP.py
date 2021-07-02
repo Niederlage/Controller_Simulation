@@ -1,6 +1,6 @@
 import casadi as ca
 import numpy as np
-from mpc_motion_plot import UTurnMPC
+from motion_plot.ackermann_motion_plot import UTurnMPC
 
 
 class CasADi_MPC_WarmUp:

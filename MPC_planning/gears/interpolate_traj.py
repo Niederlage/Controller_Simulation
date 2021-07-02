@@ -7,6 +7,21 @@ import matplotlib.pyplot as plt
 from gears.cal_angle_from_track import CalAngleFromTracks
 
 
+def continuum_yaw(yaw):
+    dyaw = np.diff(yaw)
+    stetig_yaw = [yaw[0]]
+    sum_theta = yaw[0]
+    for dtheta in dyaw:
+        if abs(dtheta) < np.pi:
+            sum_theta += dtheta
+            stetig_yaw.append(sum_theta)
+        else:
+            sum_theta += (dtheta + np.pi) % (2 * np.pi) - np.pi
+            stetig_yaw.append(sum_theta)
+
+    return np.array(stetig_yaw)
+
+
 def mod_theta(theta, t_last):
     if abs(theta - t_last) > np.pi / 2:
         if np.sign(theta) > 0:
@@ -38,6 +53,8 @@ def interpolate_track(tracks, theta, res):
 
         path.append(point)
         th_list.append(th)
+
+    # yaw = continuum_yaw(th_list)
     path = np.array(path).T
 
     return np.vstack((path, th_list))
@@ -60,14 +77,14 @@ def continuous_interpolate(tracks, theta, res):
 if __name__ == '__main__':
 
     try_test = False
-    resolution = 0.02
+    resolution = 0.1
     test_track = np.array([[0, 1, 1.5, 1., 0.],
                            [0, 1, 1.1, 1.9, 1.5]])
 
-    test_traj = np.load("../data/smoothed_traj.npz", allow_pickle=True)
-    trackx = test_traj["traj"][0]
-    tracky = test_traj["traj"][1]
-    trackth = np.array(test_traj["traj"][2])
+    test_traj = np.load("../data/saved_hybrid_a_star.npz", allow_pickle=True)
+    trackx = test_traj["saved_traj"][0]
+    tracky = test_traj["saved_traj"][1]
+    trackth = np.array(test_traj["saved_traj"][2])
     start = np.array([trackx[0], tracky[1], trackth[2]])
     tracks = np.vstack((trackx, tracky))
 
@@ -81,6 +98,10 @@ if __name__ == '__main__':
     cal_vec, theta = ca.generate_orientation(run_track, np.zeros((3,)))
     cal_path = continuous_interpolate(run_track, theta, resolution)
     print("original track size:{}, size after interpolation:{}".format(len(run_track.T), len(cal_path.T)))
+    cal_path[2, :] = continuum_yaw(cal_path[2, :])
+
+    thetaline = np.linspace(0, 100, len(theta))
+    cal_thetaline = np.linspace(0, 100, len(cal_path.T))
     fig = plt.figure()
     ax = plt.subplot(311)
     ax.plot(cal_path[0, :], cal_path[1, :], ".", label="interpolated tracks")
@@ -88,11 +109,10 @@ if __name__ == '__main__':
     ax.legend()
 
     ax = plt.subplot(312)
-    ax.plot(theta, ".",label="original angle")
+    ax.plot(theta, ".", label="original angle")
     ax.legend()
-
     ax = plt.subplot(313)
-    ax.plot(cal_path[2, :],".", label="interpolated angle")
+    ax.plot(cal_path[2, :], ".", label="interpolated angle")
     ax.legend()
     plt.show()
     print(1)

@@ -9,11 +9,11 @@ import matplotlib.pyplot as plt
 class CalAngleFromTracks():
 
     def mod_theta(self, theta, t_last):
-        if abs(theta - t_last) > np.pi / 2:
-            if np.sign(theta) > 0:
-                return theta - np.pi
-            else:
-                return theta + np.pi
+        # if abs(theta - t_last) > np.pi / 2:
+        #     if np.sign(theta) > 0:
+        #         return theta - np.pi
+        #     else:
+        #         return theta + np.pi
 
         return (theta + np.pi) % (2 * np.pi) - np.pi
 
@@ -65,20 +65,34 @@ class CalAngleFromTracks():
         else:
             return p1 - p2
 
+    def continuum_yaw(self, yaw):
+        dyaw = np.diff(yaw)
+        stetig_yaw = [yaw[0]]
+        sum_theta = yaw[0]
+        for dtheta in dyaw:
+            if abs(dtheta) < np.pi:
+                sum_theta += dtheta
+                stetig_yaw.append(sum_theta)
+            else:
+                sum_theta += (dtheta + np.pi) % (2 * np.pi) - np.pi
+                stetig_yaw.append(sum_theta)
+
+        return np.array(stetig_yaw)
 
 if __name__ == '__main__':
     test_track = np.array([[0, 1, 1.5, 1., 0.],
                            [0, 1, 1.1, 1.9, 1.5]])
     diff_test_track = np.diff(test_track, axis=1)
 
-    test_traj = np.load("../data/smoothed_traj.npz", allow_pickle=True)
-    trackx = test_traj["traj"][0]
-    tracky = test_traj["traj"][1]
-    trackth = np.array(test_traj["traj"][2])
+    test_traj = np.load("../data/saved_hybrid_a_star.npz", allow_pickle=True)
+    trackx = test_traj["saved_traj"][0]
+    tracky = test_traj["saved_traj"][1]
+    trackth = np.array(test_traj["saved_traj"][2])
     start = np.array([trackx[0], tracky[1], trackth[2]])
     track = np.vstack((trackx, tracky))
     caft = CalAngleFromTracks()
     vec_cal, theta_cal = caft.generate_orientation(track, start)
+    theta_cal = caft.continuum_yaw(theta_cal)
 
     fig = plt.figure()
     ax1 = plt.subplot(211)

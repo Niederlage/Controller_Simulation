@@ -1,23 +1,15 @@
 import time
-
 import numpy as np
 import yaml
 from gears.cubic_spline_planner import Spline2D
-from mpc_motion_plot import UTurnMPC
-from Modell_Ackermann.casadi_OBCA_warmup import CasADi_MPC_WarmUp
-from Modell_Ackermann.casadi_OBCA import CasADi_MPC_OBCA
+from motion_plot.ackermann_motion_plot import UTurnMPC
 from Modell_Ackermann.casadi_TDROBCA import CasADi_MPC_TDROBCA
-# from casadi_MPC.casadi_TDROBCA_v2 import CasADi_MPC_TDROBCA
-# from casadi_MPC.casadi_TDROBCA_v3 import CasADi_MPC_TDROBCA
+from Modell_Ackermann.casadi_OBCA_warmup import CasADi_MPC_WarmUp
 from MPC_planning.HybridAStar.hybrid_a_star import HybridAStar
 
 
-def hybrid_a_star_initialization(large):
-    if large:
-        address = "../../config_OBCA_large.yaml"
-    else:
-        address = "../config_OBCA.yaml"
-    with open(address, 'r', encoding='utf-8') as f:
+def hybrid_a_star_initialization(ut):
+    with open("../config_OBCA_large.yaml", 'r', encoding='utf-8') as f:
         param = yaml.load(f)
 
     coarse_planner = HybridAStar()
@@ -26,11 +18,21 @@ def hybrid_a_star_initialization(large):
     ex = param["goal"]
     start = [sx[0], sx[1], np.deg2rad(sx[2])]
     goal = [ex[0], ex[1], np.deg2rad(ex[2])]
-    if large:
-        coarse_planner.car.set_parameters(param)
+    coarse_planner.car.set_parameters(param)
+    traj_adress = "../data/saved_hybrid_a_star.npz"
+    map_adress = "../data/saved_obmap_obca.npz"
 
-    ob, obst, obst_points = get_all_obsts()
-    path = coarse_planner.hybrid_a_star_planning(start, goal, obst_points)
+    samples = np.zeros((1, 2))
+    ref_traj, obpoints, obst = ut.initialize_saved_data(traj_adress=traj_adress,
+                                                        map_adress=map_adress)
+    for i, ob in enumerate(obpoints):
+        samples = np.vstack((samples, ob))
+
+    samples = np.delete(samples, 0, axis=0)
+    bounds = ut.obmap.bounds
+    obpoints = np.vstack([samples, bounds]).T
+
+    path = coarse_planner.hybrid_a_star_planning(start, goal, obpoints)
 
     if path is not None:
         x = path.x_list
@@ -40,23 +42,7 @@ def hybrid_a_star_initialization(large):
     else:
         saved_path = None
 
-    return saved_path, param, obst, ob
-
-
-def get_bounds():
-    pa = [-10, -10]
-    pb = [20, 20]
-
-    edge = np.mgrid[pa[0]:pb[0]:0.1, pa[1]:pb[1]:0.1]
-    lx = edge[0, :, 0].flatten()
-    ly = edge[0, :, 0].flatten()
-    x_ = np.ones((len(lx),))
-    y_ = np.ones((len(ly),))
-    horizon_l = np.vstack((lx, pa[1] * x_))[:, :edge.shape[1]]
-    horizon_u = np.vstack((lx, pb[1] * x_))[:, :edge.shape[1]]
-    vertical_l = np.vstack((pa[0] * y_, ly))[:, :edge.shape[2]]
-    vertical_u = np.vstack((pb[0] * y_, ly))[:, :edge.shape[2]]
-    return np.block([horizon_l, horizon_u, vertical_l, vertical_u])
+    return saved_path, param, obst, obpoints
 
 
 def normalize_angle(yaw):
@@ -80,25 +66,6 @@ def expand_path(refpath, ds):
         ryaw.append(normalize_angle(yaw_))
         # rk.append(sp.calc_curvature(i_s))
     return np.array([rx, ry, ryaw])
-
-
-def get_all_obsts():
-    loadmap = np.load("../../data/saved_obmap.npz", allow_pickle=True)
-    ob1 = loadmap["pointmap"][0]
-    ob2 = loadmap["pointmap"][1]
-    ob3 = loadmap["pointmap"][2]
-    bounds = get_bounds()
-    obst_points = np.block([ob1.T, ob2.T, ob3.T, bounds])
-    ob = [ob1, ob2, ob3, bounds.T]
-    # obst_points = np.block([ob2.T, bounds])
-    # ob = ob2
-
-    ob_constraint_mat = loadmap["constraint_mat"]
-    obst = []
-    obst.append(ob_constraint_mat[4:8, :])
-    obst.append(ob_constraint_mat[:4, :])
-    obst.append(ob_constraint_mat[8:12, :])
-    return ob, obst, obst_points
 
 
 def run_segment_OBCA_mpc(param, ref_traj, shape, obst):
@@ -153,10 +120,11 @@ def run_TDROBCA_mpc(param, ref_traj, shape, obst):
     # print("warm up time:{:.3f}s".format(time.time() - warmup_time))
 
     obca = CasADi_MPC_TDROBCA()
-    # obca.get_dt(ref_traj)
+    obca.get_dt(ref_traj)
+    print("cal dt:", obca.dt0)
     obca.dt0 = 0.1
     # ref_traj = expand_path(ref_traj, 0.5 * obca.dt0 * obca.v_max)
-    ref_traj = expand_path(ref_traj, 0.1)
+    # ref_traj = expand_path(ref_traj, obca.dt0 * obca.v_max * 0.8)
     obca.set_parameters(param)
     # obca.op_lambda0 = op_lambda
     # obca.op_mu0 = op_mu
@@ -168,25 +136,24 @@ def run_TDROBCA_mpc(param, ref_traj, shape, obst):
 
 
 def main():
-    address = "../config_OBCA_large.yaml"
+    address = "../../config_OBCA_large.yaml"
     HOBCA_mpc = False
     try_segment = False
     load_file = False
     large = True
     ds = 0.1
+    ut = UTurnMPC()
 
     if not load_file:
-        ref_traj, param, obst, ob_points = hybrid_a_star_initialization(large)
+        ref_traj, param, obst, ob_points = hybrid_a_star_initialization(ut)
         # ref_traj = ref_path
         if len(ref_traj.T) > 500:
             ref_traj = None
 
         if ref_traj is not None:
-
-            ut = UTurnMPC()
+            ut.car.model_type = param["use_model_type"]
             ut.reserve_footprint = True
             shape = ut.get_car_shape()
-
             start_time = time.time()
 
             if try_segment:
@@ -197,7 +164,7 @@ def main():
             print("warm up OBCA total time:{:.3f}s".format(time.time() - start_time))
             # np.savez("../data/smoothed_traj", dt=op_dt, traj=op_trajectories, control=op_controls, refpath=ref_traj)
 
-            ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, ob_points, four_states=True)
+            ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj)
 
         else:
             print("Hybrid A Star initialization failed ....")
@@ -211,9 +178,9 @@ def main():
 
         print("load file to check!")
         ut = UTurnMPC()
-        ob_points, obst, ob_array = get_all_obsts()
+        ut.car.model_type = loads["use_model_type"]
         ut.reserve_footprint = True
-        ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, ob_points, four_states=True)
+        ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, four_states=True)
 
 
 if __name__ == '__main__':

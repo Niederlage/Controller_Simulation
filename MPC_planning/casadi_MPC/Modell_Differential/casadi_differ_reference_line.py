@@ -2,7 +2,7 @@ import casadi as ca
 import numpy as np
 import time
 from gears.cubic_spline_planner import Spline2D
-from mpc_motion_plot import UTurnMPC
+from motion_plot.differ_motion_plot import UTurnMPC
 import yaml
 
 
@@ -306,7 +306,6 @@ def main():
     with open(address, 'r', encoding='utf-8') as f:
         param = yaml.load(f)
     ut = UTurnMPC()
-    ut.set_parameters(param)
 
     # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
     cmpc = CasADi_MPC_differ()
@@ -330,6 +329,6 @@ def main():
 
 if __name__ == '__main__':
     dt = 0.1
-    local_horizon = 15
+    local_horizon = 5
     large = True
     main()

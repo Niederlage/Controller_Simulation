@@ -2,111 +2,99 @@
 # -*- coding:utf-8 -*-
 # Author:tongjue.chen@fau.de
 import matplotlib.pyplot as plt
+from obstacles.obstacles import Obstacles
+from car_modell.differ_car import DifferCarModel
 
 plt.switch_backend('TkAgg')
 import numpy as np
-from gears.polygon_generator import cal_coeff_mat
-from controller.Controller import Controller
 
 
 class UTurnMPC():
     def __init__(self):
-        self.L = 0.4
-        self.dt = 1e-1
-        self.W = 0.6  # width of car
-        self.LF = 0.6  # distance from rear to vehicle front end
-        self.LB = 0.2  # distance from rear to vehicle back end
+
         self.loc_start = np.array([-2.5, -1., np.deg2rad(70)])
         self.predicted_trajectory = None
         self.optimal_dt = None
         self.show_animation = True
         self.reserve_footprint = False
         self.plot_arrows = False
-        self.use_controller = False
         self.use_loc_start = False
-
-        self.ctrl = Controller()
-        self.u_regelung = None
-        # self.Km = self.ctrl.cal_mat_K(self.ctrl.x_s)
-
-    def set_parameters(self, param):
-        self.L = param["base"]
-        self.LF = param["LF"]  # distance from rear to vehicle front end
-        self.LB = param["LB"]  # distance from rear to vehicle back end
-        self.W = param["W"]
+        self.car = DifferCarModel()
+        self.obmap = Obstacles()
 
     def normalize_angle(self, yaw):
         return (yaw + np.pi) % (2 * np.pi) - np.pi
 
-    def differ_motion_model(self, zst, u_in, dt, Runge_Kutta=True):
+    def differ_motion_model(self, zst, u_in, dt, Runge_Kutta=False):
         v_ = u_in[0]
         omega_ = u_in[1]
         x_ = zst[0]
         y_ = zst[1]
         yaw_ = zst[2]
+        # k1_dx = v_ * np.cos(yaw_)
+        # k1_dy = v_ * np.sin(yaw_)
+        # k1_dyaw = omega_
+        # # k1_dv = a_
+        # # k1_domega = omega_rate_
+        # # k1_da = jerk_
+        #
+        # k2_dx = v_ * np.cos(yaw_ + 0.5 * dt * k1_dyaw)
+        # k2_dy = v_ * np.sin(yaw_ + 0.5 * dt * k1_dyaw)
+        # k2_dyaw = omega_
+        # # k2_dv = a_ + 0.5 * dt * k1_da
+        # # k2_domega = omega_rate_
+        # # k2_da = jerk_
+        #
+        # k3_dx = v_ * np.cos(yaw_ + 0.5 * dt * k2_dyaw)
+        # k3_dy = v_ * np.sin(yaw_ + 0.5 * dt * k2_dyaw)
+        # k3_dyaw = omega_
+        # # k3_dv = a_ + 0.5 * dt * k2_da
+        # # k3_domega = omega_rate_
+        # # k3_da = jerk_
+        #
+        # k4_dx = v_ * np.cos(yaw_ + 0.5 * dt * k3_dyaw)
+        # k4_dy = v_ * np.sin(yaw_ + 0.5 * dt * k3_dyaw)
+        # k4_dyaw = omega_
+        # # k4_dv = a_ + 0.5 * dt * k3_da
+        # # k4_domega = omega_rate_
+        # # k4_da = jerk_
+        #
+        # dx = dt * (k1_dx + 2 * k2_dx + 2 * k3_dx + k4_dx) / 6
+        # dy = dt * (k1_dy + 2 * k2_dy + 2 * k3_dy + k4_dy) / 6
+        # dyaw = dt * (k1_dyaw + 2 * k2_dyaw + 2 * k3_dyaw + k4_dyaw) / 6
+        # # dv = dt * (k1_dv + 2 * k2_dv + 2 * k3_dv + k4_dv) / 6
+        # # domega = dt * (k1_domega + 2 * k2_domega + 2 * k3_domega + k4_domega) / 6
+        # # da = dt * (k1_da + 2 * k2_da + 2 * k3_da + k4_da) / 6
+        #
+        # x_ += dx
+        # y_ += dy
+        # yaw_ += dyaw
+        # yaw_ = self.normalize_angle(yaw_)
 
-        k1_dx = v_ * np.cos(yaw_)
-        k1_dy = v_ * np.sin(yaw_)
-        k1_dyaw = omega_
-        # k1_dv = a_
-        # k1_domega = omega_rate_
-        # k1_da = jerk_
+        if not Runge_Kutta:
+            x_, y_, yaw_ = self.car.move(x_, y_, yaw_, v_ * dt, omega_ * dt)
+            return np.array([x_, y_, yaw_])
+        else:
+            x_, y_, yaw_ = self.car.move_Runge_Kutta(x_, y_, yaw_, v_, omega_, dt, a_=u_in[2], omega_rate_=u_in[3])
 
-        k2_dx = v_ * np.cos(yaw_ + 0.5 * dt * k1_dyaw)
-        k2_dy = v_ * np.sin(yaw_ + 0.5 * dt * k1_dyaw)
-        k2_dyaw = omega_
-        # k2_dv = a_ + 0.5 * dt * k1_da
-        # k2_domega = omega_rate_
-        # k2_da = jerk_
+            return np.array([x_, y_, yaw_])
 
-        k3_dx = v_ * np.cos(yaw_ + 0.5 * dt * k2_dyaw)
-        k3_dy = v_ * np.sin(yaw_ + 0.5 * dt * k2_dyaw)
-        k3_dyaw = omega_
-        # k3_dv = a_ + 0.5 * dt * k2_da
-        # k3_domega = omega_rate_
-        # k3_da = jerk_
-
-        k4_dx = v_ * np.cos(yaw_ + 0.5 * dt * k3_dyaw)
-        k4_dy = v_ * np.sin(yaw_ + 0.5 * dt * k3_dyaw)
-        k4_dyaw = omega_
-        # k4_dv = a_ + 0.5 * dt * k3_da
-        # k4_domega = omega_rate_
-        # k4_da = jerk_
-
-        dx = dt * (k1_dx + 2 * k2_dx + 2 * k3_dx + k4_dx) / 6
-        dy = dt * (k1_dy + 2 * k2_dy + 2 * k3_dy + k4_dy) / 6
-        dyaw = dt * (k1_dyaw + 2 * k2_dyaw + 2 * k3_dyaw + k4_dyaw) / 6
-        # dv = dt * (k1_dv + 2 * k2_dv + 2 * k3_dv + k4_dv) / 6
-        # domega = dt * (k1_domega + 2 * k2_domega + 2 * k3_domega + k4_domega) / 6
-        # da = dt * (k1_da + 2 * k2_da + 2 * k3_da + k4_da) / 6
-
-        x_ += dx
-        y_ += dy
-        yaw_ += dyaw
-        yaw_ = self.normalize_angle(yaw_)
-        return np.array([x_, y_, yaw_])
-
-    def plot_arrow(self, x, y, yaw, length=1.5, width=0.5):  # pragma: no cover
-        plt.arrow(x, y, length * np.cos(yaw), length * np.sin(yaw),
-                  head_length=width, head_width=width)
-        plt.plot(x, y)
-
-    def plot_robot(self, x, y, yaw):  # pragma: no cover
-
-        outline = np.array([
-            [self.LF, self.LF, -self.LB, -self.LB, self.LF],
-            [self.W / 2, -self.W / 2, - self.W / 2, self.W / 2, self.W / 2]])
-
-        Rot1 = np.array([[np.cos(yaw), -np.sin(yaw)],
-                         [np.sin(yaw), np.cos(yaw)]])
-        outline = Rot1 @ outline
-        outline[0, :] += x
-        outline[1, :] += y
-        plt.plot(np.array(outline[0, :]).flatten(),
-                 np.array(outline[1, :]).flatten(), "-", color='cadetblue')
-        if self.plot_arrows:
-            arrow_x, arrow_y, arrow_yaw = x, y, yaw
-            self.plot_arrow(arrow_x, arrow_y, arrow_yaw)
+    # def plot_robot(self, x, y, yaw):  # pragma: no cover
+    #
+    #     outline = np.array([
+    #         [self.LF, self.LF, -self.LB, -self.LB, self.LF],
+    #         [self.W / 2, -self.W / 2, - self.W / 2, self.W / 2, self.W / 2]])
+    #
+    #     Rot1 = np.array([[np.cos(yaw), -np.sin(yaw)],
+    #                      [np.sin(yaw), np.cos(yaw)]])
+    #     outline = Rot1 @ outline
+    #     outline[0, :] += x
+    #     outline[1, :] += y
+    #     plt.plot(np.array(outline[0, :]).flatten(),
+    #              np.array(outline[1, :]).flatten(), "-", color='cadetblue')
+    #     if self.plot_arrows:
+    #         arrow_x, arrow_y, arrow_yaw = x, y, yaw
+    #         self.plot_arrow(arrow_x, arrow_y, arrow_yaw)
 
     def plot_op_controls(self, timeline, v_, acc_, jerk_, yaw_, omega_, omega_rate_):
         fig = plt.figure()
@@ -163,10 +151,6 @@ class UTurnMPC():
 
         while True:
             u_in = u_op[:, k]
-            if self.use_controller:
-                u_regelung = self.lqr_regler(zst, u_op, k)
-                u_in[2:4] += u_regelung
-
             zst = self.differ_motion_model(zst, u_in, self.dt)  # simulate robot
 
             trajectory = np.vstack((trajectory, zst))  # store state history
@@ -188,7 +172,7 @@ class UTurnMPC():
 
                 ax.plot(ref_traj[0, -1], ref_traj[1, -1], "xb")
                 ax.plot(self.predicted_trajectory[0, -1], self.predicted_trajectory[1, -1], "x", color="purple")
-                self.plot_robot(zst[0], zst[1], zst[2])
+                self.car.plot_car(zst[0], zst[1], zst[2])
 
                 plt.axis("equal")
                 plt.grid(True)
@@ -218,8 +202,6 @@ class UTurnMPC():
         self.cal_distance(op_trajectories[:2, :], len(ref_traj.T))
         self.dt = op_dt
         print("Time resolution:{:.3f}s, total time:{:.3f}s".format(self.dt, self.dt * len(op_trajectories.T)))
-        if self.use_controller:
-            self.u_regelung = np.zeros((2, len(ref_traj.T)))
         yaw_ = op_trajectories[2, :]
         # omega_ = np.diff(yaw_) / op_dt
         # omega_rate_ = np.append(0., omega_)
@@ -253,21 +235,25 @@ class UTurnMPC():
         print("total covered distance:{:.3f}m".format(sum_s))
 
     def initialize_saved_data(self):
+        # loadtraj = np.load("../../data/saved_hybrid_a_star.npz")
+        # ref_traj = loadtraj["saved_traj"]
+        # loadmap = np.load("../../data/saved_obmap_obca.npz", allow_pickle=True)
+        # ob1 = loadmap["pointmap"][0]
+        # ob2 = loadmap["pointmap"][1]
+        # ob3 = loadmap["pointmap"][2]
+        # ob = [ob1, ob2, ob3]
+        #
+        # ob_constraint_mat = loadmap["constraint_mat"]
+        # obst = []
+        # obst.append(ob_constraint_mat[:4, :])
+        # obst.append(ob_constraint_mat[4:8, :])
+        # obst.append(ob_constraint_mat[8:12, :])
+
         loadtraj = np.load("../../data/saved_hybrid_a_star.npz")
         ref_traj = loadtraj["saved_traj"]
-        loadmap = np.load("../../data/saved_obmap.npz", allow_pickle=True)
-        ob1 = loadmap["pointmap"][0]
-        ob2 = loadmap["pointmap"][1]
-        ob3 = loadmap["pointmap"][2]
-        ob = [ob1, ob2, ob3]
-
-        ob_constraint_mat = loadmap["constraint_mat"]
-        obst = []
-        obst.append(ob_constraint_mat[:4, :])
-        obst.append(ob_constraint_mat[4:8, :])
-        obst.append(ob_constraint_mat[8:12, :])
-
-        return ref_traj, ob, obst
+        loadmap = np.load("../../data/saved_obmap_obca.npz", allow_pickle=True)
+        self.obmap.obst_pointmap = loadmap["pointmap"]
+        return ref_traj, loadmap["pointmap"], loadmap["constraint_mat"]
 
 
 if __name__ == '__main__':

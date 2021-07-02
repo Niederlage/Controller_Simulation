@@ -2,8 +2,8 @@ import time
 import math
 import numpy as np
 import yaml
-from mpc_motion_plot import UTurnMPC
-from casadi_differ_reference_line import CasADi_MPC_differ
+from motion_plot.differ_motion_plot import UTurnMPC
+from casadi_MPC.Modell_Differential.casadi_differ_reference_line import CasADi_MPC_differ
 from gears.cubic_spline_planner import Spline2D
 from controller.lqr_speed_steer_control import LQR_Controller
 from controller.casadi_mpc_controller import CasADi_MPC_differ_Control
@@ -366,7 +366,7 @@ class MPC_LQR_Controller:
                     plt.title("Time[s]:{:.2f}, speed[m/s]:{:.2f}".format(time, state.v))
                     # f = plt.figure()
                     # self.plot_info_realtime(x, y, yaw, v, omega, elist, ethlist)
-                    if tick % 5 == 0:
+                    if tick % 10 == 0:
                         plt.pause(0.001)
 
             tick += 1

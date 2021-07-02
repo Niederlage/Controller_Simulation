@@ -1,7 +1,7 @@
 import casadi as ca
 import numpy as np
 import time
-from mpc_motion_plot import UTurnMPC
+from motion_plot.ackermann_motion_plot import UTurnMPC
 import yaml
 
 
@@ -369,38 +369,16 @@ class CasADi_MPC_OBCA:
 
 if __name__ == '__main__':
     start_time = time.time()
-    large = True
-    if large:
-        address = "../config_OBCA_large.yaml"
-    else:
-        address = "../config_OBCA.yaml"
+    address = "../../config_OBCA_large.yaml"
+
     with open(address, 'r', encoding='utf-8') as f:
         param = yaml.load(f)
 
     ut = UTurnMPC()
-    ut.set_parameters(param)
-
     ut.reserve_footprint = True
     # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
     cmpc = CasADi_MPC_OBCA()
     cmpc.set_parameters(param)
-
-    # def initialize_saved_data():
-    #     loadtraj = np.load("../data/saved_hybrid_a_star.npz")
-    #     ref_traj = loadtraj["saved_traj"]
-    #     loadmap = np.load("../data/saved_obmap.npz", allow_pickle=True)
-    #     # ob1 = loadmap["pointmap"][0]
-    #     ob2 = loadmap["pointmap"][1]
-    #     # ob3 = loadmap["pointmap"][2]
-    #     # ob = [ob1, ob2, ob3]
-    #     ob = [ob2]
-    #     ob_constraint_mat = loadmap["constraint_mat"]
-    #     obst = []
-    #     # obst.append(ob_constraint_mat[:4, :])
-    #     obst.append(ob_constraint_mat[4:8, :])
-    #     # obst.append(ob_constraint_mat[8:12, :])
-
-    # return ref_traj, ob, obst
 
     ref_traj, ob, obst = ut.initialize_saved_data()
     shape = ut.get_car_shape()
@@ -409,3 +387,4 @@ if __name__ == '__main__':
     op_dt, op_trajectories, op_controls, vl, vm = cmpc.get_result_OBCA()
     print("OBCA total time:{:.3f}s".format(time.time() - start_time))
     ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, ob)
+

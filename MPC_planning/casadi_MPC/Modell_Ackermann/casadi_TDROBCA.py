@@ -1,7 +1,8 @@
 import casadi as ca
 import numpy as np
 import time
-from mpc_motion_plot import UTurnMPC
+from motion_plot.ackermann_motion_plot import UTurnMPC
+from gears.cubic_spline_planner import calc_spline_course
 import yaml
 
 
@@ -34,11 +35,11 @@ class CasADi_MPC_TDROBCA:
         self.steer_rate_max = ca.pi * 40 / 180
         self.jerk_max = 10.
         self.dmin = 0.
-        self.optimize_dt = False
-        self.reduced_states = False
+        self.optimize_dt = True
+        self.reduced_states = True
 
     def set_parameters(self, param):
-        self.base = param["base"]
+        # self.base = param["base"]
         self.LF = param["LF"]  # distance from rear to vehicle front end
         self.LB = param["LB"]  # distance from rear to vehicle back end
 
@@ -210,11 +211,11 @@ class CasADi_MPC_TDROBCA:
             if i > 0:
                 sum_states_rate += ca.sumsqr(x_[:, i] - x_[:, i - 1])
 
-        obj = self.wg[3] * sum_states_rate + 1e3 * self.wg[9] * sum_mindist \
-              + 1e0 * self.wg[4] * sum_reference \
-              + 1e0 * self.wg[7] * ca.sumsqr(x_[:2, -1] - ref_path[:2, -1]) \
-              + 1e0 * self.wg[9] * ca.sumsqr(x_[2, -1] - ref_path[2, -1]) \
-              + 5 * self.wg[2] * sum_time
+        obj = self.wg[3] * sum_states_rate - 9 * self.wg[8] * sum_mindist \
+              + self.wg[1] * sum_reference \
+              + self.wg[7] * ca.sumsqr(x_[:2, -1] - ref_path[:2, -1]) \
+              + self.wg[9] * ca.sumsqr(x_[2, -1] - ref_path[2, -1]) \
+              + 5 * self.wg[6] * sum_time
         return obj
 
     def init_bounds_OBCA(self, start, goal):
@@ -243,13 +244,16 @@ class CasADi_MPC_TDROBCA:
                 ubx[7, i] = self.jerk_max  # jerk
 
             lbx[self.nx:-self.obst_num, i] = 1e-8  # lambda, mu
-            ubx[self.nx:-self.obst_num, i] = 1.  # lambda, mu
-            lbx[-self.obst_num:, i] = -1.  # dmin
-            ubx[-self.obst_num:, i] = -1e-6  # -4e-5  # dmin
+            ubx[self.nx:-self.obst_num, i] = ca.inf  # lambda, mu
+            lbx[-self.obst_num:, i] = -ca.inf  # dmin
+            ubx[-self.obst_num:, i] = -1e-8  # -4e-5  # dmin
+            ubx[self.nx:-self.obst_num, i] = ca.inf  # lambda, mu
+            lbx[-self.obst_num:, i] = -ca.inf  # dmin
+            ubx[-self.obst_num:, i] = -1e-8  # -4e-5  # dmin
 
         # constraint1 rotT_i @ Aj.T @ lambdaj + GT @ mu_i == 0
         lbg[self.ng:self.ng + 2 * self.obst_num, :] = 0.
-        ubg[self.ng:self.ng + 2 * self.obst_num, :] = 1e-6
+        ubg[self.ng:self.ng + 2 * self.obst_num, :] = 1e-5
 
         # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i + dmin == 0
         lbg[self.ng + 2 * self.obst_num:self.ng + 3 * self.obst_num, :] = 0.
@@ -297,6 +301,86 @@ class CasADi_MPC_TDROBCA:
 
         return lbx_, ubx_, lbg_, ubg_
 
+    def init_bounds_OBCA2(self, start, goal):
+
+        lbx = ca.DM.zeros(self.nx, self.horizon)
+        lblambda = ca.DM.zeros(self.obst_num * self.sides, self.horizon)
+        lbmu = ca.DM.zeros(self.sides, self.horizon)
+        lbd = ca.DM.zeros(self.obst_num, self.horizon)
+
+        ubx = ca.DM.zeros(self.nx, self.horizon)
+        ublambda = ca.DM.zeros(self.obst_num * self.sides, self.horizon)
+        ubmu = ca.DM.zeros(self.sides, self.horizon)
+        ubd = ca.DM.zeros(self.obst_num, self.horizon)
+
+        lbg = ca.DM.zeros(self.ng, self.horizon - 1)
+        lbobca = ca.DM.zeros(self.sides * self.obst_num, self.horizon - 1)
+        ubg = ca.DM.zeros(self.ng, self.horizon - 1)
+        ubobca = ca.DM.zeros(self.sides * self.obst_num, self.horizon - 1)
+
+        for i in range(self.horizon):
+            lbx[0, i] = -self.x_max  # x
+            ubx[0, i] = self.x_max  # x
+            lbx[1, i] = -self.y_max  # y
+            ubx[1, i] = self.y_max  # 1.1y
+            lbx[2, i] = -ca.pi  # th
+            ubx[2, i] = ca.pi  # th
+            lbx[3, i] = -self.v_max  # v
+            ubx[3, i] = self.v_max  # v
+            lbx[4, i] = -self.steer_max  # steer
+            ubx[4, i] = self.steer_max  # steer
+            if not self.reduced_states:
+                lbx[5, i] = -self.a_max  # a
+                ubx[5, i] = self.a_max  # a
+                lbx[6, i] = -self.steer_rate_max  # steer_rate
+                ubx[6, i] = self.steer_rate_max  # steer_rate
+                lbx[7, i] = -self.jerk_max  # jerk
+                ubx[7, i] = self.jerk_max  # jerk
+
+            lblambda[:, i] = 1e-8  # lambda, mu
+            lbmu[:, i] = 1e-8
+            lbd[:, i] = -ca.inf
+            ublambda[:, i] = ca.inf  # lambda, mu
+            ubmu[:, i] = ca.inf
+            ubd[:, i] = -1e-8
+
+        lbg[:, :] = -1e-5
+        ubg[:, :] = 1e-5
+
+        lbobca[:2 * self.obst_num, :] = 0.
+        ubobca[:2 * self.obst_num, :] = 1e-5
+        lbobca[2 * self.obst_num:3 * self.obst_num, :] = 0.
+        ubobca[2 * self.obst_num:3 * self.obst_num, :] = 0.
+        lbobca[3 * self.obst_num:4 * self.obst_num, :] = 0.
+        ubobca[3 * self.obst_num:4 * self.obst_num, :] = 1.
+
+        lbx[0, 0] = start[0]
+        lbx[1, 0] = start[1]
+        lbx[2, 0] = start[2]
+        lbx[3:, 0] = 0.
+
+        ubx[0, 0] = start[0]
+        ubx[1, 0] = start[1]
+        ubx[2, 0] = start[2]
+        ubx[3:, 0] = 0.
+
+        lbx_ = ca.vertcat(lbx, lblambda, lbmu, lbd)
+        ubx_ = ca.vertcat(ubx, ublambda, ubmu, ubd)
+        lbg_ = ca.vertcat(lbg, lbobca)
+        ubg_ = ca.vertcat(ubg, ubobca)
+
+        lbx_ = ca.reshape(lbx_, -1, 1)
+        ubx_ = ca.reshape(ubx_, -1, 1)
+
+        if self.optimize_dt:
+            lbx_ = ca.vertcat(0.01, lbx_)
+            ubx_ = ca.vertcat(0.2, ubx_)
+
+        lbg_ = ca.reshape(lbg_, -1, 1)
+        ubg_ = ca.reshape(ubg_, -1, 1)
+
+        return lbx_, ubx_, lbg_, ubg_
+
     def get_dt(self, ref_path):
         diff_s = np.diff(ref_path[:2, :], axis=1)
         sum_s = np.sum(np.hypot(diff_s[0], diff_s[1]))
@@ -320,21 +404,22 @@ class CasADi_MPC_TDROBCA:
             x0[1, i] = reference_path[1, i]
             x0[2, i] = reference_path[2, i]
 
-            if i > 1:
-                ds = np.linalg.norm(reference_path[:2, i] - reference_path[:2, i - 1])
-                dyaw = reference_path[2, i] - reference_path[2, i - 1]
-                steer = ca.atan2(dyaw * self.base / ds, 1)
-                x0[3, i] = ds / self.dt0
-                x0[4, i] = steer
-                if not self.reduced_states:
-                    x0[5, i] = (ds / self.dt0 - last_v) / self.dt0
-                    x0[6, i] = (steer - last_steer) / self.dt0
-                    x0[7, i] = ((ds / self.dt0 - last_v) / self.dt0 - last_a) / self.dt0
-            if not self.reduced_states:
-                last_v = x0[3, i]
-                last_steer = x0[4, i]
-                last_a = x0[5, i]
-
+            # if i > 1:
+            #     ds = np.linalg.norm(reference_path[:2, i] - reference_path[:2, i - 1])
+            #     dyaw = reference_path[2, i] - reference_path[2, i - 1]
+            #     steer = ca.atan2(dyaw * self.base / ds, 1)
+            #     x0[3, i] = ds / self.dt0
+            #     x0[4, i] = steer
+            #     if not self.reduced_states:
+            #         x0[5, i] = (ds / self.dt0 - last_v) / self.dt0
+            #         x0[6, i] = (steer - last_steer) / self.dt0
+            #         x0[7, i] = ((ds / self.dt0 - last_v) / self.dt0 - last_a) / self.dt0
+            # if not self.reduced_states:
+            #     last_v = x0[3, i]
+            #     last_steer = x0[4, i]
+            #     last_a = x0[5, i]
+        # x0[2, 0] = reference_path[2, 0]
+        # x0[2, -1] = reference_path[2, -1]
         if self.op_control0 is not None:
             x0[3:, :] = self.op_control0
 
@@ -389,7 +474,7 @@ class CasADi_MPC_TDROBCA:
         nlp = {"x": X, "f": F, "g": G}
         opts_setting = {"expand": False,
                         "ipopt.hessian_approximation": "exact",
-                        'ipopt.max_iter': 200,
+                        'ipopt.max_iter': 100,
                         'ipopt.print_level': 3,
                         'print_time': 1,
                         'ipopt.acceptable_tol': 1e-8,
@@ -411,7 +496,7 @@ class CasADi_MPC_TDROBCA:
         return X, G
 
     def organize_bounds(self, x0, y0):
-        lbx, ubx, lbg, ubg = self.init_bounds_OBCA(x0[:, 0], x0[:, -1])
+        lbx, ubx, lbg, ubg = self.init_bounds_OBCA2(x0[:, 0], x0[:, -1])
         x_all = ca.vertcat(x0, y0)
         X0 = ca.reshape(x_all, -1, 1)
         # X0 = ca.vertcat(self.dt0, x0_)
@@ -443,6 +528,15 @@ class CasADi_MPC_TDROBCA:
         return op_dt, op_trajectories, op_controls, vl, vm
 
 
+def expand_path(refpath, ds):
+    x = refpath[0, :]
+    y = refpath[1, :]
+    theta0 = refpath[2, 0]
+    rx, ry, ryaw, rk, s = calc_spline_course(x, y, ds)
+
+    return np.array([rx, ry, ryaw])
+
+
 if __name__ == '__main__':
     start_time = time.time()
 
@@ -455,7 +549,6 @@ if __name__ == '__main__':
         param = yaml.load(f)
 
     ut = UTurnMPC()
-    ut.set_parameters(param)
     ut.reserve_footprint = True
     # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
     cmpc = CasADi_MPC_TDROBCA()
@@ -464,7 +557,9 @@ if __name__ == '__main__':
     shape = ut.get_car_shape()
     # cmpc.get_dt(ref_traj)
 
+    ref_traj = expand_path(ref_traj, cmpc.dt0 * cmpc.v_max * 0.5)
     cmpc.init_model_OBCA(ref_traj, shape, obst)
     op_dt, op_trajectories, op_controls, vl, vm = cmpc.get_result_OBCA()
     print("TDROBCA total time:{:.3f}s".format(time.time() - start_time))
-    ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, ob)
+
+    ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, four_states=True)

@@ -87,11 +87,11 @@ class CasADi_MPC_differ_Control:
         R_ = ca.DM.eye(2 * self.horizon)
         beta = 0.8
         Qk = ca.DM.eye(5)
-        # Qk[0, 0] = 1e3
-        # Qk[1, 1] = 1e3
-        # Qk[2, 2] = 1e1
-        # Qk[3, 3] = 1e2
-        # Qk[4, 4] = 1e2
+        Qk[0, 0] = 1e3
+        Qk[1, 1] = 1e3
+        Qk[2, 2] = 1e1
+        Qk[3, 3] = 1e4
+        Qk[4, 4] = 1e2
 
         D_ = ca.DM.eye(2 * self.horizon)
         lba = ca.DM.zeros(2 * self.horizon, 1)

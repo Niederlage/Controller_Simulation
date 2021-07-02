@@ -1,27 +1,30 @@
 import casadi as ca
 import numpy as np
 import time
-from mpc_motion_plot import UTurnMPC
+from motion_plot.ackermann_motion_plot import UTurnMPC
+from gears.cubic_spline_planner import calc_spline_course
 import yaml
 
 
-class CasADi_MPC_OBCA_PathOnly:
+class CasADi_MPC_OBCA_reduced:
     def __init__(self):
         self.base = 2.0
         self.LF = 3.
         self.LB = 1.
         self.offset = (self.LF - self.LB) / 2
-
-        self.nx = 4
-        self.ng = 3
-        self.min_distance = 0.2
-        self.steer_max = np.pi * 40 / 180
+        self.x_max = 14
+        self.y_max = 15
+        self.nx = 6
+        self.ng = 4
+        self.v_max = 1.3
+        self.steer_max = np.pi * 50 / 180
+        self.a_max = 4.
 
         self.model = None
         self.x_opt = None
         self.obst_num = 0
         self.horizon = 0
-
+        self.dt = 0.1
         self.wg = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 1e1, 1e2, 1e3]
         self.dmin = 0.
 
@@ -39,51 +42,52 @@ class CasADi_MPC_OBCA_PathOnly:
 
         return ca.reshape(sx, rows, cols)
 
-    def init_motion_constraints(self, x, d_res, gx):
+    def init_motion_constraints(self, x, dt):
+        gx = ca.SX.sym("g1", self.ng, self.horizon - 1)
         for i in range(self.horizon - 1):
             x_ = x[0, i]
             y_ = x[1, i]
             yaw_ = x[2, i]
-            steer_ = x[3, i]
-            #
-            # dx = d_res * ca.cos(yaw_)
-            # dy = d_res * ca.sin(yaw_)
-            # dyaw = d_res / self.base * ca.tan(steer_)
+            v_ = x[3, i]
+            steer_ = x[4, i]
+            a_ = x[5, i]
 
-            k1_dx = d_res * ca.cos(yaw_)
-            k1_dy = d_res * ca.sin(yaw_)
-            k1_dyaw = d_res / self.base * ca.tan(steer_)
+            k1_dx = v_ * ca.cos(yaw_)
+            k1_dy = v_ * ca.sin(yaw_)
+            k1_dyaw = v_ / self.base * ca.tan(steer_)
+            k1_dv = a_
 
-            k2_dx = d_res * ca.cos(yaw_ + 0.5 * k1_dyaw)
-            k2_dy = d_res * ca.sin(yaw_ + 0.5 * k1_dyaw)
-            k2_dyaw = d_res / self.base * ca.tan(steer_)
+            k2_dx = (v_ + 0.5 * dt * k1_dv) * ca.cos(yaw_ + 0.5 * dt * k1_dyaw)
+            k2_dy = (v_ + 0.5 * dt * k1_dv) * ca.sin(yaw_ + 0.5 * dt * k1_dyaw)
+            k2_dyaw = (v_ + 0.5 * dt * k1_dv) / self.base * ca.tan(steer_)
+            k2_dv = a_
 
-            k3_dx = d_res * ca.cos(yaw_ + 0.5 * k2_dyaw)
-            k3_dy = d_res * ca.sin(yaw_ + 0.5 * k2_dyaw)
-            k3_dyaw = d_res / self.base * ca.tan(steer_)
+            k3_dx = (v_ + 0.5 * dt * k2_dv) * ca.cos(yaw_ + 0.5 * dt * k2_dyaw)
+            k3_dy = (v_ + 0.5 * dt * k2_dv) * ca.sin(yaw_ + 0.5 * dt * k2_dyaw)
+            k3_dyaw = (v_ + 0.5 * dt * k2_dv) / self.base * ca.tan(steer_)
+            k3_dv = a_
 
-            k4_dx = d_res * ca.cos(yaw_ + 0.5 * k3_dyaw)
-            k4_dy = d_res * ca.sin(yaw_ + 0.5 * k3_dyaw)
-            k4_dyaw = d_res / self.base * ca.tan(steer_)
+            k4_dx = (v_ + 0.5 * dt * k3_dv) * ca.cos(yaw_ + 0.5 * dt * k3_dyaw)
+            k4_dy = (v_ + 0.5 * dt * k3_dv) * ca.sin(yaw_ + 0.5 * dt * k3_dyaw)
+            k4_dyaw = (v_ + 0.5 * dt * k3_dv) / self.base * ca.tan(steer_)
+            k4_dv = a_
 
-            dx = (k1_dx + 2 * k2_dx + 2 * k3_dx + k4_dx) / 6
-            dy = (k1_dy + 2 * k2_dy + 2 * k3_dy + k4_dy) / 6
-            dyaw = (k1_dyaw + 2 * k2_dyaw + 2 * k3_dyaw + k4_dyaw) / 6
+            dx = dt * (k1_dx + 2 * k2_dx + 2 * k3_dx + k4_dx) / 6
+            dy = dt * (k1_dy + 2 * k2_dy + 2 * k3_dy + k4_dy) / 6
+            dyaw = dt * (k1_dyaw + 2 * k2_dyaw + 2 * k3_dyaw + k4_dyaw) / 6
+            dv = dt * (k1_dv + 2 * k2_dv + 2 * k3_dv + k4_dv) / 6
 
             gx[0, i] = x_ + dx - x[0, i + 1]
             gx[1, i] = y_ + dy - x[1, i + 1]
             gx[2, i] = yaw_ + dyaw - x[2, i + 1]
+            gx[3, i] = v_ + dv - x[3, i + 1]
 
         return gx
 
-    def init_OBCA_constraints(self, x_, lambda_, mu_, shape, obst, gx):
+    def init_OBCA_constraints(self, x_, lambda_, mu_, shape, obst):
+        gx = ca.SX.sym("g2", self.obst_num * 4, self.horizon - 1)
         gT = self.Array2SX(shape[:, 2][:, None].T)
         GT = self.Array2SX(shape[:, :2].T)
-
-        # lambda_v = ca.reshape(lambda_o, -1, 1)
-        # lambda_ = ca.reshape(lambda_v, self.horizon, 4 * self.obst_num).T
-        # mu_v = ca.reshape(mu_o, -1, 1)
-        # mu_ = ca.reshape(mu_v, self.horizon, 4).T
 
         # G = ca.SX.zeros(4, 2)
         # G[0, 0] = 1
@@ -118,7 +122,7 @@ class CasADi_MPC_OBCA_PathOnly:
                 lambdaj = lambda_[(4 * j):(4 * (j + 1)), i]
 
                 constraint1 = ca.mtimes(ca.mtimes(rotT_i, Aj.T), lambdaj) + ca.mtimes(GT, mu_i)
-                constraint2 = ca.mtimes((ca.mtimes(Aj, t_i) - bj).T, lambdaj) - ca.mtimes(gT, mu_i) + d
+                constraint2 = ca.mtimes((ca.mtimes(Aj, t_i) - bj).T, lambdaj) - ca.mtimes(gT, mu_i)
                 constraint3 = ca.sumsqr(ca.mtimes(Aj.T, lambdaj))
                 constraint10 = constraint1[0, 0]
                 constraint11 = constraint1[1, 0]
@@ -130,11 +134,41 @@ class CasADi_MPC_OBCA_PathOnly:
 
         return gx
 
-    def init_objects(self, x, ref_path):
+    def init_objects(self, x, lambda_, mu_, ref_path):
         sum_states_rate = 0
         sum_controls = 0
         sum_controls_rate = 0
         sum_dist_to_ref = 0
+        # sum_g1 = 0.
+        # sum_g2 = 0.
+        # sum_g3 = 0.
+        # gT = self.Array2SX(shape[:, 2][:, None].T)
+        # GT = self.Array2SX(shape[:, :2].T)
+        #
+        # for i in range(self.horizon - 1):
+        #     mu_i = mu_[:, i]
+        #     yaw_i = x[2, i]
+        #     offset = ca.SX.zeros(2, 1)
+        #     offset[0, 0] = 1 * ca.cos(yaw_i)
+        #     offset[1, 0] = 1 * ca.sin(yaw_i)
+        #     t_i = x[:2, i] + offset
+        #     rotT_i = ca.SX.zeros(2, 2)
+        #     rotT_i[0, 0] = ca.cos(yaw_i)
+        #     rotT_i[1, 1] = ca.cos(yaw_i)
+        #     rotT_i[1, 0] = -ca.sin(yaw_i)
+        #     rotT_i[0, 1] = ca.sin(yaw_i)
+        #
+        #     for j in range(self.obst_num):
+        #         Aj = self.Array2SX(obst[j][:, :2])
+        #         bj = self.Array2SX(obst[j][:, 2][:, None])
+        #         lambdaj = lambda_[(4 * j):(4 * (j + 1)), i]
+        #
+        #         constraint1 = ca.mtimes(ca.mtimes(rotT_i, Aj.T), lambdaj) + ca.mtimes(GT, mu_i)
+        #         constraint2 = ca.mtimes((ca.mtimes(Aj, t_i) - bj).T, lambdaj) - ca.mtimes(gT, mu_i)
+        #         constraint3 = ca.sumsqr(ca.mtimes(Aj.T, lambdaj)) - 1
+        #         sum_g1 += ca.sumsqr(constraint1)
+        #         sum_g2 += ca.sumsqr(constraint2)
+        #         sum_g3 += ca.sumsqr(constraint3)
 
         for i in range(self.horizon - 1):
             sum_controls += ca.sumsqr(x[3:, i])  # uk
@@ -144,10 +178,13 @@ class CasADi_MPC_OBCA_PathOnly:
                 sum_states_rate += ca.sumsqr(x[:3, i] - x[:3, i - 1])  # xk - xk-1
                 sum_controls_rate += ca.sumsqr(x[3:, i] - x[3:, i - 1])  # uk - uk-1
 
-        obj = self.wg[9] * sum_states_rate \
-              + self.wg[9] * sum_controls + 1e1 * self.wg[6] * sum_controls_rate \
-              + self.wg[2] * sum_dist_to_ref + 1e6 * self.wg[9] * ca.sumsqr(x[:2, -1] - ref_path[:2, -1]) + 1e6 * \
-              self.wg[9] * ca.sumsqr(x[2, -1] - ref_path[2, -1])
+        obj = self.wg[3] * sum_states_rate \
+              + self.wg[4] * sum_controls \
+              + self.wg[9] * sum_dist_to_ref \
+              + self.wg[3] * ca.sumsqr(x[:2, -1] - ref_path[:2, -1]) + \
+              self.wg[9] * ca.sumsqr(x[2, -1] - ref_path[2, -1]) \
+            # + 1e10 * self.wg[9] * sum_g1 + 1e10 * self.wg[6] * sum_g2 + 1e10 * self.wg[5] * sum_g3
+
         return obj
 
     def init_bounds_OBCA(self, start, goal):
@@ -155,19 +192,25 @@ class CasADi_MPC_OBCA_PathOnly:
         ubx = ca.DM(self.nx + (self.obst_num + 1) * 4, self.horizon)
         lbg = ca.DM(self.ng + 4 * self.obst_num, self.horizon - 1)
         ubg = ca.DM(self.ng + 4 * self.obst_num, self.horizon - 1)
+        # lbg = ca.DM(self.ng, self.horizon - 1)
+        # ubg = ca.DM(self.ng, self.horizon - 1)
 
         for i in range(self.horizon - 1):
-            lbx[0, i] = -20.  # x
-            lbx[1, i] = -20.  # y
+            lbx[0, i] = -self.x_max  # x
+            lbx[1, i] = -self.y_max  # y
             lbx[2, i] = -ca.pi  # th
-            lbx[3, i] = -self.steer_max  # steer
-            lbx[4:, i] = 1e-10  # lambda, mu
+            lbx[3, i] = -self.v_max  # v
+            lbx[4, i] = -self.steer_max  # steer
+            lbx[5, i] = -self.a_max  # a
+            lbx[6:, i] = 0  # lambda, mu
 
-            ubx[0, i] = 20.  # x
-            ubx[1, i] = 20.  # y
+            ubx[0, i] = self.x_max  # x
+            ubx[1, i] = self.y_max  # y
             ubx[2, i] = ca.pi  # th
-            ubx[3, i] = self.steer_max  # steer
-            ubx[4:, i] = 1.  # lambda, mu
+            ubx[3, i] = self.v_max  # v
+            ubx[4, i] = self.steer_max  # steer
+            ubx[5, i] = self.a_max  # a
+            ubx[6:, i] = 2.  # lambda, mu
 
             ubg[:self.ng, i] = 1e-5
 
@@ -176,8 +219,8 @@ class CasADi_MPC_OBCA_PathOnly:
             ubg[self.ng: self.ng + 2 * self.obst_num, i] = 1e-5
 
             # constraint2 (Aj @ t_i - bj).T @ lambdaj - gT @ mu_i
-            lbg[self.ng + 2 * self.obst_num:self.ng + 3 * self.obst_num, i] = 1e-4
-            ubg[self.ng + 2 * self.obst_num:self.ng + 3 * self.obst_num, i] = 1.
+            lbg[self.ng + 2 * self.obst_num:self.ng + 3 * self.obst_num, i] = 1e-5
+            ubg[self.ng + 2 * self.obst_num:self.ng + 3 * self.obst_num, i] = 10.
 
             # constraint3  norm_2(Aj.T @ lambdaj) - 1
             lbg[self.ng + 3 * self.obst_num:self.ng + 4 * self.obst_num, i] = 0.
@@ -186,26 +229,22 @@ class CasADi_MPC_OBCA_PathOnly:
         lbx[0, 0] = start[0]
         lbx[1, 0] = start[1]
         lbx[2, 0] = start[2]
-        lbx[3:, 0] = 0.
+        # lbx[3:, 0] = 0.
 
         ubx[0, 0] = start[0]
         ubx[1, 0] = start[1]
         ubx[2, 0] = start[2]
-        ubx[3:, 0] = 0.
+        # ubx[3:, 0] = 0.
 
         # lbx[0, -1] = goal[0]
         # lbx[1, -1] = goal[1]
         # lbx[2, -1] = goal[2] - 0.1
-        lbx[0, -1] = -20.
-        lbx[1, -1] = -20.
+        lbx[0, -1] = -self.x_max
+        lbx[1, -1] = -self.y_max
         lbx[2, -1] = -ca.pi
-        # lbx[3:, -1] = 0.
 
-        # ubx[0, -1] = goal[0]
-        # ubx[1, -1] = goal[1]
-        # ubx[2, -1] = goal[2] + 0.1
-        ubx[0, -1] = 20.
-        ubx[1, -1] = 20.
+        ubx[0, -1] = self.x_max
+        ubx[1, -1] = self.y_max
         ubx[2, -1] = ca.pi
         # ubx[3:, -1] = 0.
 
@@ -226,9 +265,10 @@ class CasADi_MPC_OBCA_PathOnly:
             x0[2, i] = reference_path[2, i]
             if i > 1:
                 ds = np.linalg.norm(reference_path[:2, i] - reference_path[:2, i - 1])
+                x0[4, i] = ds / self.dt
                 dyaw = reference_path[2, i] - reference_path[2, i - 1]
-                steer = ca.atan2(dyaw * self.base / ds, 1)
-                x0[3, i] = steer
+                steer = ca.atan2(dyaw * self.base / (ds + 1e-10), 1)
+                x0[4, i] = steer
 
         return x0
 
@@ -239,6 +279,7 @@ class CasADi_MPC_OBCA_PathOnly:
     def init_model_OBCA(self, reference_path, shape_m, obst_m):
         self.horizon = reference_path.shape[1]
         self.obst_num = len(obst_m)
+        dt = self.dt
 
         # initialize variables
         x = ca.SX.sym("x", self.nx, self.horizon)  # (x ,y ,theta ,steer)
@@ -249,22 +290,20 @@ class CasADi_MPC_OBCA_PathOnly:
         v0 = self.dual_variables_initialization()
 
         # initialize constraints
-        g1 = ca.SX.sym("g1", self.ng, self.horizon - 1)
-        g1 = self.init_motion_constraints(x, self.min_distance, g1)
-        g2 = ca.SX.sym("g2", self.obst_num * 4, self.horizon - 1)
-        g2 = self.init_OBCA_constraints(x, lambda_, mu_, shape_m, obst_m, g2)
+        g1 = self.init_motion_constraints(x, dt)
+        g2 = self.init_OBCA_constraints(x, lambda_, mu_, shape_m, obst_m)
         gx = ca.vertcat(g1, g2)
 
         X, G = self.organize_variables(x, lambda_, mu_, gx)
         X0, XL, XU, GL, GU = self.organize_bounds(x0_, v0)
 
         # initialize objectives
-        F = self.init_objects(x, x0_)
+        F = self.init_objects(x, lambda_, mu_, x0_)
 
         nlp = {"x": X, "f": F, "g": G}
         opts_setting = {"expand": True,
                         "ipopt.hessian_approximation": "exact",
-                        'ipopt.max_iter': 200,
+                        'ipopt.max_iter': 100,
                         'ipopt.print_level': 3,
                         'print_time': 1,
                         'ipopt.acceptable_tol': 1e-8,
@@ -293,51 +332,31 @@ class CasADi_MPC_OBCA_PathOnly:
     def get_result_OBCA(self):
         cal_traj = ca.reshape(self.x_opt, self.nx + (self.obst_num + 1) * 4, self.horizon)
         op_trajectories = np.array(cal_traj[:3, :])
-        kappa = np.array(cal_traj[3, :])
-        vl = np.array(cal_traj[4:4 + self.obst_num * 4, :])
-        vm = np.array(cal_traj[4 + self.obst_num * 4:, :])
-        return op_trajectories, kappa, vl, vm
+        op_controls = np.array(cal_traj[3:self.nx, :])
+        vl = np.array(cal_traj[self.nx:self.nx + self.obst_num * 4, :])
+        vm = np.array(cal_traj[self.nx + self.obst_num * 4:, :])
+        return op_trajectories, op_controls, vl, vm
 
 
 if __name__ == '__main__':
     start_time = time.time()
-    large = True
-    if large:
-        address = "../../config_OBCA_large.yaml"
-    else:
-        address = "../config_OBCA.yaml"
-    with open(address, 'r', encoding='utf-8') as f:
+    with open("../../config_OBCA_large.yaml", 'r', encoding='utf-8') as f:
         param = yaml.load(f)
-
-
-    def initialize_saved_data():
-        loadtraj = np.load("../../data/saved_hybrid_a_star.npz")
-        ref_traj = loadtraj["saved_traj"]
-        loadmap = np.load("../../data/saved_obmap.npz", allow_pickle=True)
-        ob1 = loadmap["pointmap"][0]
-        ob2 = loadmap["pointmap"][1]
-        ob3 = loadmap["pointmap"][2]
-        ob = [ob1, ob2, ob3]
-        # ob = [ob2]
-        ob_constraint_mat = loadmap["constraint_mat"]
-        obst = []
-        obst.append(ob_constraint_mat[:4, :])
-        obst.append(ob_constraint_mat[4:8, :])
-        obst.append(ob_constraint_mat[8:12, :])
-
-        return ref_traj, ob, obst
-
 
     ut = UTurnMPC()
     ut.reserve_footprint = True
-    ut.set_parameters(param)
-    cmpc = CasADi_MPC_OBCA_PathOnly()
+
+    cmpc = CasADi_MPC_OBCA_reduced()
     cmpc.set_parameters(param)
-    ref_traj, ob, obst = initialize_saved_data()
+    ref_traj, ob, obst = ut.initialize_saved_data()
     shape = ut.get_car_shape()
 
-    # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
-    cmpc.init_model_OBCA(ref_traj, shape, obst)
-    op_trajectories, kappa, vl, vm = cmpc.get_result_OBCA()
+    rx, ry, ryaw, rk, s = calc_spline_course(ref_traj[0, :], ref_traj[1, :], ds=0.8 * cmpc.v_max * cmpc.dt)
+    refpath = np.array([rx, ry, ryaw])
+
+    # states: (x ,y ,theta ,v , steer, a)
+    cmpc.init_model_OBCA(refpath, shape, obst)
+    op_trajectories, op_control, vl, vm = cmpc.get_result_OBCA()
     print("OBCA total time:{:.3f}s".format(time.time() - start_time))
-    ut.plot_results_path_only(op_trajectories, ref_traj, ob)
+    # op_dt, op_trajectories, op_controls, ref_traj
+    ut.plot_results(cmpc.dt, op_trajectories, op_control, ref_traj, four_states=True)

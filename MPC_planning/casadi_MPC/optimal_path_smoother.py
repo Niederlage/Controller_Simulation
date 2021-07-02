@@ -1,7 +1,6 @@
 import casadi as ca
 import numpy as np
 import time
-from Modell_Ackermann.mpc_motion_plot import UTurnMPC
 import yaml
 import matplotlib.pyplot as plt
 
