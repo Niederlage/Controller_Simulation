@@ -4,9 +4,9 @@ import matplotlib.pyplot as plt
 
 class Obstacles:
     def __init__(self):
-        self.resolution = 0.5
-        self.bounds_left_down = [-12, -2]
-        self.bounds_right_up = [12, 25]
+        self.resolution = 0.1
+        self.bounds_left_down = [-4.5, -5.5]
+        self.bounds_right_up = [4.5, 5.5]
         self.bounds = self.get_bounds()
 
         self.obst_keypoints = None
@@ -14,6 +14,7 @@ class Obstacles:
         self.coeff_mat = None
         self.samples = []
 
+        self.show_obstacles = True
         self.show_bounds = True
         self.sample_test = False
         self.save_map_as_fig = False
@@ -88,7 +89,7 @@ class Obstacles:
 
         return np.array(rdn_list)
 
-    def generate_polygon_map(self):
+    def generate_polygon_map1(self):
 
         obst1 = np.array([[-10, 6.],
                           [-3.5, 6.],
@@ -119,6 +120,41 @@ class Obstacles:
         self.obst_keypoints = obst_
         self.coeff_mat = mat_list
         self.obst_pointmap = self.get_point_map(obst_, 0.2)
+
+    def generate_polygon_map(self):
+        xoffset = 3.8
+        yoffset = -0.6
+
+        obst1 = np.array([[xoffset, yoffset],
+                          [xoffset + .5, yoffset],
+                          [xoffset + .5, yoffset + .05],
+                          [xoffset, yoffset + .05],
+                          [xoffset + .5, yoffset]])
+
+        tf_1 = np.array([0, 1., 0])
+        obst2 = self.Euclidean_Transform(obst1, tf_1)
+
+        tf_2 = np.array([15 / 10, 0.5])[:, None]
+        # obst3 = np.copy(self.Scale_Transformation(obst1, tf_2))
+        # obst3 = self.Euclidean_Transform(obst3, np.array([10, 10, 0]))
+        # tf_3 = np.array([12 / 10, 1.])[:, None]
+        # obst4 = np.copy(self.Scale_Transformation(obst1, tf_3))
+        # obst4 = self.Euclidean_Transform(obst4, np.array([5, 18, 0]))
+
+        obst_ = [obst1, obst2]
+        mat_list = []
+
+        for i, ob_i in enumerate(obst_):
+            coeff_mat = self.cal_coeff_mat(ob_i)
+            mat_list.append(coeff_mat)
+
+            if self.sample_test:
+                sample = self.monte_carlo_sample_test(coeff_mat)
+                self.samples.append(sample)
+
+        self.obst_keypoints = obst_
+        self.coeff_mat = mat_list
+        self.obst_pointmap = self.get_point_map(obst_, 0.1)
 
     def get_point_map(self, obstmap, step_size):
         shape_list = []
@@ -172,7 +208,7 @@ class Obstacles:
     def plot_obst(self, ax):
         # for ob_ in self.obst_keypoints:
         #     ax.plot(ob_[:, 0], ob_[:, 1], "rx")
-        if self.obst_pointmap is not None:
+        if self.obst_pointmap is not None and self.show_obstacles:
             for ob_ in self.obst_pointmap:
                 ax.plot(ob_[:, 0], ob_[:, 1], color="black")
         if self.show_bounds:

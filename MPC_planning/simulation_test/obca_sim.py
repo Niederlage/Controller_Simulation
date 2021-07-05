@@ -9,7 +9,9 @@ from MPC_planning.HybridAStar.hybrid_a_star import HybridAStar
 
 
 def hybrid_a_star_initialization(ut):
-    with open("../config_OBCA_large.yaml", 'r', encoding='utf-8') as f:
+    # path = "../config_OBCA_large.yaml"
+    path = "../config_forklift.yaml"
+    with open(path, 'r', encoding='utf-8') as f:
         param = yaml.load(f)
 
     coarse_planner = HybridAStar()
@@ -20,7 +22,7 @@ def hybrid_a_star_initialization(ut):
     goal = [ex[0], ex[1], np.deg2rad(ex[2])]
     coarse_planner.car.set_parameters(param)
     traj_adress = "../data/saved_hybrid_a_star.npz"
-    map_adress = "../data/saved_obmap_obca.npz"
+    map_adress = "../data/saved_obmap.npz"
 
     samples = np.zeros((1, 2))
     ref_traj, obpoints, obst = ut.initialize_saved_data(traj_adress=traj_adress,
@@ -153,6 +155,7 @@ def main():
         if ref_traj is not None:
             ut.car.model_type = param["use_model_type"]
             ut.reserve_footprint = True
+            ut.car.set_parameters(param)
             shape = ut.get_car_shape()
             start_time = time.time()
 

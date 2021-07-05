@@ -26,19 +26,20 @@ address = "../config_forklift.yaml"
 # address = "../config_OBCA_large.yaml"
 obmap_address = "../data/saved_obmap.npz"
 
+
 class HybridAStar:
     def __init__(self):
         self.XY_GRID_RESOLUTION = 1  # [ m / grid]
-        self.YAW_GRID_RESOLUTION = np.deg2rad(5.0)  # [rad/ grid]
-        self.MOTION_RESOLUTION = 0.2  # [m/ grid] path interpolate resolution
-        self.N_STEER = 10  # number of steer command
+        self.YAW_GRID_RESOLUTION = np.deg2rad(1.0)  # [rad/ grid]
+        self.MOTION_RESOLUTION = 0.01  # [m/ grid] path interpolate resolution
+        self.N_STEER = 15  # number of steer command
         self.ROBOT_RADIUS = 0.8  # robot radius
 
-        self.SB_COST = 1e10  # switch back penalty cost
-        self.BACK_COST = 1e15  # backward penalty cost
-        self.STEER_CHANGE_COST = 1.0  # steer angle change penalty cost
-        self.STEER_COST = 10.0  # steer angle change penalty cost
-        self.H_COST = 15.0  # Heuristic cost
+        self.SB_COST = 1e-1  # switch back penalty cost
+        self.BACK_COST = 1e-3  # backward penalty cost
+        self.STEER_CHANGE_COST = 1e8  # steer angle change penalty cost
+        self.STEER_COST = 1e4  # steer angle change penalty cost
+        self.H_COST = 1e3  # Heuristic cost
         self.rs = ReedsSheppPathPlanning()
         self.car = AckermannCarModel()
         self.dph = DynamicProgrammingHeuristic()
@@ -47,6 +48,7 @@ class HybridAStar:
 
     def calc_motion_inputs(self):
         ############## get steer list interpolation with direction #####################
+
         for steer in np.concatenate((np.linspace(-self.car.MAX_STEER, self.car.MAX_STEER,
                                                  self.N_STEER), [0.0])):
             for d in [1, -1]:
@@ -117,6 +119,9 @@ class HybridAStar:
         goal_yaw = goal.yaw_list[-1]
 
         max_curvature = math.tan(self.car.MAX_STEER) / self.car.WB
+        if max_curvature >= 100:
+            max_curvature = 100
+
         paths = self.rs.calc_paths(start_x, start_y, start_yaw,
                                    goal_x, goal_y, goal_yaw,
                                    max_curvature, step_size=self.MOTION_RESOLUTION)
@@ -132,7 +137,8 @@ class HybridAStar:
                 if not best or best > cost:
                     best = cost
                     best_path = path
-
+        if best_path is not None:
+            print("best path mode:", best_path.ctypes)
         return best_path
 
     def update_node_with_analytic_expansion(self, current, goal,
@@ -277,7 +283,7 @@ class HybridAStar:
     def calc_cost(self, n, h_dp, c):
         ind = (n.y_index - c.min_y) * c.x_w + (n.x_index - c.min_x)
         if ind not in h_dp:
-            return n.cost + 999999999  # collision cost
+            return n.cost + 1e20  # collision cost
         return n.cost + self.H_COST * h_dp[ind].cost
 
     def get_final_path(self, closed, goal_node):
@@ -338,6 +344,7 @@ class HybridAStar:
             bounds = self.obmap.get_bounds()
             self.obmap.obst_pointmap = load["pointmap"]
             return np.vstack([samples, bounds]).T
+            # return bounds.T
         else:
             ox, oy = [], []
             for i in range(10):
@@ -382,7 +389,7 @@ class HybridAStar:
             ex = param["goal"]
             start = [sx[0], sx[1], np.deg2rad(sx[2])]
             goal = [ex[0], ex[1], np.deg2rad(ex[2])]
-            # self.car.set_parameters(param)
+            self.car.set_parameters(param)
         else:
             # Set Initial parameters
             start = [10.0, 10.0, np.deg2rad(90.0)]
@@ -407,9 +414,42 @@ class HybridAStar:
                  saved_ob=saved_hybrid_a_star_ob)
 
 
+def get_start_point():
+    x = -2.8
+    # x = 1.1
+
+    # y = -1.75
+    # y = 0.
+    y = 1.
+
+    thlist = [0., 45., 90., 135., 180.]
+
+    th = thlist[3]
+
+    yaw = np.deg2rad(th)
+
+    return [x, y, yaw]
+
+
+def get_s(ref_path):
+    diff_s = np.diff(ref_path, axis=1)
+    sum_s = np.sum(np.hypot(diff_s[0], diff_s[1]))
+    l = len(ref_path)
+    print("iterations:", l)
+    print("total dist:", sum_s)
+    # sum_theta = 0.
+    # for i in range(l - 1):
+    #     if np.linalg.norm(diff_s[:, i]) < 1e-5:
+    #         sum_theta += abs(diff_s[2, i])
+    #
+    # print("extra rot dist:", sum_theta)
+
+
 def main():
     planner = HybridAStar()
     start, goal, obst = planner.init_startpoints(address)
+    start = get_start_point()
+
     fig = plt.figure()
     ax = fig.add_subplot(111)
     if planner.show_animation:
@@ -422,25 +462,27 @@ def main():
         plt.axis("equal")
 
     path = planner.hybrid_a_star_planning(start, goal, obst)
+    refpath = np.array([path.x_list, path.y_list, path.yaw_list])
+    get_s(refpath)
     planner.save_planned_path(path, planner, obst)
 
     if planner.show_animation:
-        f =plt.figure()
-
+        f = plt.close()
         plt.plot(np.rad2deg(path.yaw_list), "-g", label="Hybrid A* yaw")
         k = 0
 
         f2 = plt.figure()
+        ax = fig.add_subplot(111)
         for i_x, i_y, i_yaw in zip(path.x_list, path.y_list, path.yaw_list):
-            plt.cla()
-            # plt.plot(obst[0], obst[1], ".k")
-            planner.obmap.plot_obst(ax)
+            # plt.cla()
+            plt.plot(obst[0], obst[1], ".k")
+            # planner.obmap.plot_obst(ax)
             plt.plot(path.x_list, path.y_list, "-r", label="Hybrid A* path")
             plt.grid(True)
             plt.axis("equal")
-            planner.car.plot_robot(i_x, i_y, i_yaw)
+            planner.car.plot_car(i_x, i_y, i_yaw)
             k += 1
-            if k % 2 == 0:
+            if k % 1 == 0:
                 plt.pause(0.001)
 
     print(__file__ + " done!!")
@@ -448,5 +490,4 @@ def main():
 
 
 if __name__ == '__main__':
-
     main()

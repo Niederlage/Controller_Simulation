@@ -84,7 +84,7 @@ class DynamicProgrammingHeuristic:
                 plt.gcf().canvas.mpl_connect(
                     'key_release_event',
                     lambda event: [exit(0) if event.key == 'escape' else None])
-                if len(closed_set.keys()) % 10 == 0:
+                if len(closed_set.keys()) % 1 == 0:
                     plt.pause(0.001)
 
             # Remove the item from the open set

@@ -376,8 +376,8 @@ def main():
     # end_y = 0.0  # [m]
     # end_yaw = np.deg2rad(0.0)  # [rad]
 
-    curvature = 0.5
-    step_size = 0.1
+    curvature = 1.0
+    step_size = 0.2
     rspp = ReedsSheppPathPlanning()
     px, py, pyaw, mode, clen = rspp.reeds_shepp_path_planning(
         start_x, start_y, start_yaw, end_x, end_y, end_yaw, curvature, step_size)

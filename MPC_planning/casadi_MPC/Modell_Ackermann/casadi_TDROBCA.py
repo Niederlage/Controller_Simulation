@@ -26,8 +26,8 @@ class CasADi_MPC_TDROBCA:
         self.op_control0 = None
         self.sides = 4
         self.wg = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 1e1, 1e2, 1e3]
-        self.x_max = 30.
-        self.y_max = 30.
+        self.x_max = 20.
+        self.y_max = 20.
         self.v_max = 5.
         self.steer_max = ca.pi * 40 / 180
         self.omega_max = ca.pi
@@ -39,7 +39,7 @@ class CasADi_MPC_TDROBCA:
         self.reduced_states = True
 
     def set_parameters(self, param):
-        # self.base = param["base"]
+        self.base = param["base"]
         self.LF = param["LF"]  # distance from rear to vehicle front end
         self.LB = param["LB"]  # distance from rear to vehicle back end
 
@@ -197,7 +197,7 @@ class CasADi_MPC_TDROBCA:
 
         return g2
 
-    def init_objects(self, dt, x_, d_, ref_path):
+    def init_objects2(self, dt, x_, d_, ref_path):
         sum_time = 0
         sum_mindist = 0
         sum_reference = 0
@@ -211,14 +211,49 @@ class CasADi_MPC_TDROBCA:
             if i > 0:
                 sum_states_rate += ca.sumsqr(x_[:, i] - x_[:, i - 1])
 
-        obj = self.wg[3] * sum_states_rate - 9 * self.wg[8] * sum_mindist \
+        obj = - 9 * self.wg[8] * sum_mindist \
               + self.wg[1] * sum_reference \
-              + self.wg[7] * ca.sumsqr(x_[:2, -1] - ref_path[:2, -1]) \
-              + self.wg[9] * ca.sumsqr(x_[2, -1] - ref_path[2, -1]) \
-              + 5 * self.wg[6] * sum_time
+              + 5 * self.wg[6] * sum_time \
+              + self.wg[3] * sum_states_rate
+        # + self.wg[7] * ca.sumsqr(x_[:2, -1] - ref_path[:2, -1]) \
+        # + self.wg[9] * ca.sumsqr(x_[2, -1] - ref_path[2, -1]) \
+
         return obj
 
-    def init_bounds_OBCA(self, start, goal):
+    def init_objects(self, dt, x_, d_, ref_path):
+        sum_time = 0
+        sum_mindist = 0
+        sum_reference = 0
+        sum_v = 0.
+        sum_steer = 0.
+        sum_v_rate = 0.
+        sum_steer_rate = 0.
+        sum_cover_dist = 0.
+
+        for i in range(self.horizon):
+            if self.optimize_dt:
+                sum_time += ca.power(dt, 2)
+            sum_reference += ca.sumsqr(x_[:3, i] - ref_path[:3, i])
+            sum_cover_dist += ca.sumsqr(x_[:2, i])
+            sum_v = ca.sumsqr(x_[3, i])
+            sum_steer = ca.sumsqr(x_[4, i])
+            sum_mindist += ca.sumsqr(d_[:, i])
+            if i > 0:
+                sum_v_rate += ca.sumsqr((x_[3, i] - x_[3, i - 1]) / dt)
+                sum_steer_rate += ca.sumsqr((x_[4, i] - x_[4, i - 1]) / dt)
+
+        obj = - 9 * self.wg[8] * sum_mindist \
+              + self.wg[3] * sum_reference \
+              + 5 * self.wg[5] * sum_time \
+              + self.wg[2] * sum_v \
+              + self.wg[0] * sum_steer \
+              + self.wg[0] * sum_v_rate \
+              + self.wg[4] * sum_steer_rate \
+              + self.wg[1] * sum_cover_dist
+
+        return obj
+
+    def init_bounds_OBCA(self, refpath):
         lbx = ca.DM.zeros(self.nx + (self.obst_num + 1) * self.sides + self.obst_num, self.horizon)
         ubx = ca.DM.zeros(self.nx + (self.obst_num + 1) * self.sides + self.obst_num, self.horizon)
         lbg = ca.DM.zeros(self.ng + self.sides * self.obst_num, self.horizon - 1)
@@ -263,14 +298,14 @@ class CasADi_MPC_TDROBCA:
         lbg[self.ng + 3 * self.obst_num:self.ng + 4 * self.obst_num, :] = 0.
         ubg[self.ng + 3 * self.obst_num:self.ng + 4 * self.obst_num, :] = 1.
 
-        lbx[0, 0] = start[0]
-        lbx[1, 0] = start[1]
-        lbx[2, 0] = start[2]
+        lbx[0, 0] = refpath[0, 0]
+        lbx[1, 0] = refpath[1, 0]
+        lbx[2, 0] = refpath[2, 0]
         lbx[3:, 0] = 0.
 
-        ubx[0, 0] = start[0]
-        ubx[1, 0] = start[1]
-        ubx[2, 0] = start[2]
+        ubx[0, 0] = refpath[0, 0]
+        ubx[1, 0] = refpath[1, 0]
+        ubx[2, 0] = refpath[2, 0]
         ubx[3:, 0] = 0.
 
         # ubx[0, -1] = goal[0]
@@ -301,7 +336,7 @@ class CasADi_MPC_TDROBCA:
 
         return lbx_, ubx_, lbg_, ubg_
 
-    def init_bounds_OBCA2(self, start, goal):
+    def init_bounds_OBCA2(self, refpath):
 
         lbx = ca.DM.zeros(self.nx, self.horizon)
         lblambda = ca.DM.zeros(self.obst_num * self.sides, self.horizon)
@@ -323,6 +358,96 @@ class CasADi_MPC_TDROBCA:
             ubx[0, i] = self.x_max  # x
             lbx[1, i] = -self.y_max  # y
             ubx[1, i] = self.y_max  # 1.1y
+            lbx[2, i] = -ca.inf  # th
+            ubx[2, i] = ca.inf  # th
+            lbx[3, i] = -self.v_max  # v
+            ubx[3, i] = self.v_max  # v
+            lbx[4, i] = -self.steer_max  # steer
+            ubx[4, i] = self.steer_max  # steer
+            if not self.reduced_states:
+                lbx[5, i] = -self.a_max  # a
+                ubx[5, i] = self.a_max  # a
+                lbx[6, i] = -self.steer_rate_max  # steer_rate
+                ubx[6, i] = self.steer_rate_max  # steer_rate
+                lbx[7, i] = -self.jerk_max  # jerk
+                ubx[7, i] = self.jerk_max  # jerk
+
+            lblambda[:, i] = 1e-8  # lambda, mu
+            lbmu[:, i] = 1e-8
+            lbd[:, i] = -ca.inf
+            ublambda[:, i] = ca.inf  # lambda, mu
+            ubmu[:, i] = ca.inf
+            ubd[:, i] = -1e-8
+
+        lbg[:, :] = -1e-5
+        ubg[:, :] = 1e-5
+
+        lbobca[:2 * self.obst_num, :] = 0.
+        ubobca[:2 * self.obst_num, :] = 1e-5
+        lbobca[2 * self.obst_num:3 * self.obst_num, :] = 0.
+        ubobca[2 * self.obst_num:3 * self.obst_num, :] = 0.
+        lbobca[3 * self.obst_num:4 * self.obst_num, :] = 0.
+        ubobca[3 * self.obst_num:4 * self.obst_num, :] = 1.
+
+        lbx[0, 0] = refpath[0, 0]
+        lbx[1, 0] = refpath[1, 0]
+        lbx[2, 0] = refpath[2, 0]
+        lbx[3:, 0] = 0.
+
+        ubx[0, 0] = refpath[0, 0]
+        ubx[1, 0] = refpath[1, 0]
+        ubx[2, 0] = refpath[2, 0]
+        ubx[3:, 0] = 0.
+
+        lbx[0, -1] = refpath[0, -1] - 0.2
+        lbx[1, -1] = refpath[1, -1] - 0.2
+        lbx[2, -1] = refpath[2, -1]
+        lbx[3:, -1] = 0.
+
+        ubx[0, -1] = refpath[0, -1] + 0.2
+        ubx[1, -1] = refpath[1, -1] + 0.2
+        ubx[2, -1] = refpath[2, -1]
+        ubx[3:, -1] = 0.
+
+        lbx_ = ca.vertcat(lbx, lblambda, lbmu, lbd)
+        ubx_ = ca.vertcat(ubx, ublambda, ubmu, ubd)
+        lbg_ = ca.vertcat(lbg, lbobca)
+        ubg_ = ca.vertcat(ubg, ubobca)
+
+        lbx_ = ca.reshape(lbx_, -1, 1)
+        ubx_ = ca.reshape(ubx_, -1, 1)
+
+        if self.optimize_dt:
+            lbx_ = ca.vertcat(0.01, lbx_)
+            ubx_ = ca.vertcat(0.2, ubx_)
+
+        lbg_ = ca.reshape(lbg_, -1, 1)
+        ubg_ = ca.reshape(ubg_, -1, 1)
+
+        return lbx_, ubx_, lbg_, ubg_
+
+    def init_bounds_OBCA3(self, refpath):
+
+        lbx = ca.DM.zeros(self.nx, self.horizon)
+        lblambda = ca.DM.zeros(self.obst_num * self.sides, self.horizon)
+        lbmu = ca.DM.zeros(self.sides, self.horizon)
+        lbd = ca.DM.zeros(self.obst_num, self.horizon)
+
+        ubx = ca.DM.zeros(self.nx, self.horizon)
+        ublambda = ca.DM.zeros(self.obst_num * self.sides, self.horizon)
+        ubmu = ca.DM.zeros(self.sides, self.horizon)
+        ubd = ca.DM.zeros(self.obst_num, self.horizon)
+
+        lbg = ca.DM.zeros(self.ng, self.horizon - 1)
+        lbobca = ca.DM.zeros(self.sides * self.obst_num, self.horizon - 1)
+        ubg = ca.DM.zeros(self.ng, self.horizon - 1)
+        ubobca = ca.DM.zeros(self.sides * self.obst_num, self.horizon - 1)
+
+        for i in range(self.horizon):
+            lbx[0, i] = refpath[0, i] - 0.5  # x
+            ubx[0, i] = refpath[0, i] + 0.5  # x
+            lbx[1, i] = refpath[1, i] - 0.5  # y
+            ubx[1, i] = refpath[1, i] + 0.5  # 1.1y
             lbx[2, i] = -ca.pi  # th
             ubx[2, i] = ca.pi  # th
             lbx[3, i] = -self.v_max  # v
@@ -354,15 +479,25 @@ class CasADi_MPC_TDROBCA:
         lbobca[3 * self.obst_num:4 * self.obst_num, :] = 0.
         ubobca[3 * self.obst_num:4 * self.obst_num, :] = 1.
 
-        lbx[0, 0] = start[0]
-        lbx[1, 0] = start[1]
-        lbx[2, 0] = start[2]
+        lbx[0, 0] = refpath[0, 0]
+        lbx[1, 0] = refpath[1, 0]
+        lbx[2, 0] = refpath[2, 0]
         lbx[3:, 0] = 0.
 
-        ubx[0, 0] = start[0]
-        ubx[1, 0] = start[1]
-        ubx[2, 0] = start[2]
+        ubx[0, 0] = refpath[0, 0]
+        ubx[1, 0] = refpath[1, 0]
+        ubx[2, 0] = refpath[2, 0]
         ubx[3:, 0] = 0.
+
+        lbx[0, -1] = refpath[0, -1] - 0.2
+        lbx[1, -1] = refpath[1, -1] - 0.2
+        lbx[2, -1] = refpath[2, -1]
+        lbx[3:, -1] = 0.
+
+        ubx[0, -1] = refpath[0, -1] + 0.2
+        ubx[1, -1] = refpath[1, -1] + 0.2
+        ubx[2, -1] = refpath[2, -1]
+        ubx[3:, -1] = 0.
 
         lbx_ = ca.vertcat(lbx, lblambda, lbmu, lbd)
         ubx_ = ca.vertcat(ubx, ublambda, ubmu, ubd)
@@ -404,20 +539,20 @@ class CasADi_MPC_TDROBCA:
             x0[1, i] = reference_path[1, i]
             x0[2, i] = reference_path[2, i]
 
-            # if i > 1:
-            #     ds = np.linalg.norm(reference_path[:2, i] - reference_path[:2, i - 1])
-            #     dyaw = reference_path[2, i] - reference_path[2, i - 1]
-            #     steer = ca.atan2(dyaw * self.base / ds, 1)
-            #     x0[3, i] = ds / self.dt0
-            #     x0[4, i] = steer
-            #     if not self.reduced_states:
-            #         x0[5, i] = (ds / self.dt0 - last_v) / self.dt0
-            #         x0[6, i] = (steer - last_steer) / self.dt0
-            #         x0[7, i] = ((ds / self.dt0 - last_v) / self.dt0 - last_a) / self.dt0
-            # if not self.reduced_states:
-            #     last_v = x0[3, i]
-            #     last_steer = x0[4, i]
-            #     last_a = x0[5, i]
+            if i > 1:
+                ds = np.linalg.norm(reference_path[:2, i] - reference_path[:2, i - 1])
+                dyaw = reference_path[2, i] - reference_path[2, i - 1]
+                steer = ca.atan2(dyaw * self.base / ds, 1)
+                x0[3, i] = ds / self.dt0
+                x0[4, i] = steer
+                if not self.reduced_states:
+                    x0[5, i] = (ds / self.dt0 - last_v) / self.dt0
+                    x0[6, i] = (steer - last_steer) / self.dt0
+                    x0[7, i] = ((ds / self.dt0 - last_v) / self.dt0 - last_a) / self.dt0
+            if not self.reduced_states:
+                last_v = x0[3, i]
+                last_steer = x0[4, i]
+                last_a = x0[5, i]
         # x0[2, 0] = reference_path[2, 0]
         # x0[2, -1] = reference_path[2, -1]
         if self.op_control0 is not None:
@@ -457,13 +592,15 @@ class CasADi_MPC_TDROBCA:
         d_ = ca.SX.sym("d", self.obst_num, self.horizon)
 
         # initialize constraints
-        # g1 = self.init_dynamic_constraints(x, self.dt0, g1)
         g1 = self.init_dynamic_constraints(x, dt)
         g2 = self.init_OBCA_constraints(x, lambda_, mu_, d_, shape_m, obst_m)
         gx = ca.vertcat(g1, g2)
 
         X, G = self.organize_variables(x, lambda_, mu_, d_, gx)
-        X0, XL, XU, GL, GU = self.organize_bounds(x0_, v0)
+        XL, XU, GL, GU = self.init_bounds_OBCA(reference_path)
+        x_all = ca.vertcat(x0_, v0)
+        X0 = ca.reshape(x_all, -1, 1)
+
         if self.optimize_dt:
             X = ca.vertcat(dt, X)
             X0 = ca.vertcat(self.dt0, X0)
@@ -494,14 +631,6 @@ class CasADi_MPC_TDROBCA:
         G = ca.reshape(cg, -1, 1)
 
         return X, G
-
-    def organize_bounds(self, x0, y0):
-        lbx, ubx, lbg, ubg = self.init_bounds_OBCA2(x0[:, 0], x0[:, -1])
-        x_all = ca.vertcat(x0, y0)
-        X0 = ca.reshape(x_all, -1, 1)
-        # X0 = ca.vertcat(self.dt0, x0_)
-
-        return X0, lbx, ubx, lbg, ubg
 
     def get_result_OBCA(self):
         op_dt = float(self.dt0)

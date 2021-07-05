@@ -17,11 +17,13 @@ class UTurnMPC():
         self.optimal_dt = None
         self.show_animation = True
         self.reserve_footprint = False
+        self.use_Runge_Kutta = False
         self.plot_arrows = False
         self.car = AckermannCarModel()
         self.obmap = Obstacles()
+        self.show_obstacles = False
 
-    def ackermann_motion_model(self, zst, u_in, dt, Runge_Kutta=True):
+    def ackermann_motion_model(self, zst, u_in, dt, Runge_Kutta=False):
         v_ = u_in[0]
         steer_ = u_in[1]
         x_ = zst[0]
@@ -29,14 +31,16 @@ class UTurnMPC():
         yaw_ = zst[2]
 
         if not Runge_Kutta:
-            x_, y_, yaw_ = self.car.move(x_, y_, yaw_, v_ * dt, steer_)
+            # x_, y_, yaw_ = self.car.move(x_, y_, yaw_, v_ * dt, steer_)
+            x_, y_, yaw_ = self.car.move_forklift(x_, y_, yaw_, v_ * dt, steer_)
             return np.array([x_, y_, yaw_])
         else:
+            # x_, y_, yaw_ = self.car.move_Runge_Kutta(x_, y_, yaw_, v_, steer_, dt, a_=u_in[2], steer_rate_=u_in[3])
             x_, y_, yaw_ = self.car.move_Runge_Kutta(x_, y_, yaw_, v_, steer_, dt, a_=u_in[2], steer_rate_=u_in[3])
 
             return np.array([x_, y_, yaw_])
 
-    def plot_op_controls(self, v_, acc_, jerk_, yaw_, yaw_rate_, steer_, steer_rate_, four_states=False):
+    def plot_op_controls(self, v_, acc_, jerk_, yaw_, yaw_rate_, steer_, steer_rate_, four_states=True):
         fig = plt.figure()
         ax = plt.subplot(211)
         ax.plot(v_, label="v", color="red")
@@ -48,7 +52,7 @@ class UTurnMPC():
 
         ax = plt.subplot(212)
         ax.plot(yaw_ * 180 / np.pi, label="heading/grad")
-        ax.plot(yaw_rate_ * 180 / np.pi, label="yaw rate/grad")
+        # ax.plot(yaw_rate_ * 180 / np.pi, label="yaw rate/grad")
         ax.plot(steer_ * 180 / np.pi, label="steer/grad", color="red")
         if not four_states:
             ax.plot(steer_rate_ * 180 / np.pi, "-.", label="steer rate/grad")
@@ -87,15 +91,16 @@ class UTurnMPC():
         else:
             plt.pause(0.001)
 
-    def try_tracking(self, zst, u_op, trajectory, ref_traj=None):
+    def try_tracking(self, zst, u_op, trajectory, ref_traj=None, four_states=False):
         k = 0
         f = plt.figure()
         ax = plt.subplot()
         self.obmap.plot_obst(ax)
+
         while True:
             u_in = u_op[:, k]
 
-            zst = self.ackermann_motion_model(zst, u_in, self.dt)  # simulate robot
+            zst = self.ackermann_motion_model(zst, u_in, self.dt, Runge_Kutta=self.use_Runge_Kutta )  # simulate robot
             trajectory = np.vstack((trajectory, zst))  # store state history
 
             if self.show_animation:
@@ -108,7 +113,7 @@ class UTurnMPC():
 
         return trajectory
 
-    def plot_results(self, op_dt, op_trajectories, op_controls, ref_traj, four_states=False):
+    def plot_results(self, op_dt, op_trajectories, op_controls, ref_traj, four_states=True):
 
         self.predicted_trajectory = op_trajectories
         zst = ref_traj[:, 0]
@@ -125,72 +130,26 @@ class UTurnMPC():
 
         v_ = op_controls[0, :]
         steer_ = op_controls[1, :]
-        acc_ = op_controls[2, :]
 
         if four_states:
+            acc_ = np.diff(op_controls[0, :]) / op_dt
+            acc_ = np.append(0., acc_)
+
             steer_rate = np.diff(op_controls[1, :]) / op_dt
             steer_rate_ = np.append(0., steer_rate)
 
-            jerk = np.diff(op_controls[2, :]) / op_dt
+            jerk = np.diff(acc_) / op_dt
             jerk_ = np.append(0., jerk)
         else:
+            acc_ = op_controls[2, :]
             steer_rate_ = op_controls[3, :]
             jerk_ = op_controls[4, :]
 
         self.plot_op_controls(v_, acc_, jerk_, yaw_, yaw_rate_, steer_, steer_rate_, four_states)
 
-        trajectory = self.try_tracking(zst, op_controls, trajectory, ref_traj=ref_traj)
+        trajectory = self.try_tracking(zst, op_controls, trajectory, ref_traj=ref_traj, four_states=four_states)
 
         print("Done")
-        plt.show()
-
-    def plot_results_path_only(self, op_trajectories, ref_traj):
-
-        self.cal_distance(op_trajectories[:2, :])
-        fig = plt.figure()
-        # ax = plt.subplot(111)
-        plt.plot(op_trajectories[2, :] * 180 / np.pi, label="yaw/grad")
-        # ax.plot(op_trajectories[3, :] * 180 / np.pi, label="steer/grad")
-        plt.grid()
-        plt.legend()
-
-        f = plt.figure()
-        ax = f.add_subplot(111)
-        i = 0
-        self.obmap.plot_obst(ax)
-        while True:
-            if self.show_animation:
-                if not self.reserve_footprint:
-                    plt.cla()
-                    self.plot_arrows = True
-                    self.obmap.plot_obst(ax)
-
-                # for stopping simulation with the esc key.
-                plt.gcf().canvas.mpl_connect(
-                    'key_release_event',
-                    lambda event: [exit(0) if event.key == 'escape' else None])
-
-                if ref_traj is not None:
-                    plt.plot(ref_traj[0, 1:], ref_traj[1, 1:], "-", color="fuchsia", label="reference")
-
-                plt.plot(op_trajectories[0, :], op_trajectories[1, :], "xg", label="MPC prediciton")
-                plt.plot(op_trajectories[0, -1], op_trajectories[1, -1], "x", color="purple")
-                self.car.plot_robot(op_trajectories[0, i], op_trajectories[1, i], op_trajectories[2, i])
-
-                if not self.reserve_footprint:
-                    handles, labels = ax.get_legend_handles_labels()
-                    ax.legend(handles, labels, fontsize=10, loc="upper left")
-
-                plt.axis("equal")
-                plt.grid(True)
-                if i % 2 == 0:
-                    plt.pause(0.01)
-                i += 1
-
-                if i >= op_trajectories.shape[1]:
-                    print("end point arrived...")
-                    break
-
         plt.show()
 
     def cal_distance(self, op_trajectories):

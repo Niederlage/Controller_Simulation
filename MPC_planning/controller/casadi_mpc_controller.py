@@ -35,7 +35,7 @@ class CasADi_MPC_differ_Control:
     def get_A(self, vr, yawr, dt):
         A = ca.DM.eye(5)
         A[0, 2] = - vr * ca.sin(yawr) * dt
-        A[0, 3] = vr * ca.cos(yawr) * dt
+        A[1, 3] = vr * ca.cos(yawr) * dt
         A[1, 2] = ca.cos(yawr) * dt
         A[1, 3] = ca.sin(yawr) * dt
         A[2, 4] = dt

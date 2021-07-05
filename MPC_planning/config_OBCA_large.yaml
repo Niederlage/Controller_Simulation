@@ -5,11 +5,11 @@ W: 2.0
 use_model_type: car
 start:
   - -8.5  # x end   - -7.5  # x end
-  - 12 # y end - 7.5 # y end
+  - 10 # y end - 7.5 # y end
   - 0. # theta end - 0. # theta end
 goal: # goal with angle
-  - 8.6  # x end - -0.8  # x end
-  - 10.5 # y end - 1.5 # y end
+  - -0.6  # x end - -0.8  # x end
+  - 1.5 # y end - 1.5 # y end
   - 90. # theta end   - 90. # theta end
 ref_v: 1.5
 dt: 0.1

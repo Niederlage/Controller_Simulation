@@ -19,13 +19,13 @@ class AckermannCarModel:
         self.W = 2.0  # width of car
         self.LF = 3.0  # distance from rear to vehicle front end
         self.LB = 1.0  # distance from rear to vehicle back end
-        self.MAX_STEER = 60 / 180 * np.pi  # [rad] maximum steering angle
+        self.MAX_STEER = 90 / 180 * np.pi  # [rad] maximum steering angle
         self.SAFE_FRONT = self.LF + 0.05
         self.SAFE_BACK = self.LB + 0.05
         self.SAFE_WIDTH = self.W + 0.05
         self.W_BUBBLE_DIST = (self.LF - self.LB) / 2.0
         self.W_BUBBLE_R = sqrt(((self.LF + self.LB) / 2.0) ** 2 + 1)
-        self.wheel_diameter = 0.5
+        self.wheel_diameter = 0.4
         self.wheel_width = 0.2
         self.model_type = "forklift"
 
@@ -130,11 +130,11 @@ class AckermannCarModel:
     def plot_robot(self, x, y, yaw, steer=0.):
         if self.model_type == "car":
             # print(" use model: car ")
-            self.plot_car(x, y, yaw, steer=0.)
+            self.plot_car(x, y, yaw, steer=steer)
 
         elif self.model_type == "forklift":
             # print(" use model: forklift ")
-            self.plot_forklift(x, y, yaw, steer=0.)
+            self.plot_forklift(x, y, yaw, steer=steer)
 
         else:
             print("no model selected!")
@@ -188,7 +188,14 @@ class AckermannCarModel:
         y += distance * sin(yaw)
         yaw += self.pi_2_pi(distance * tan(steer) / self.WB)  # distance/2
 
-        return x, y, yaw
+        return x, y, self.pi_2_pi(yaw)
+
+    def move_forklift(self, x, y, yaw, distance, steer):
+        x += distance * cos(yaw) * cos(steer)
+        y += distance * sin(yaw) * cos(steer)
+        yaw += self.pi_2_pi(distance * sin(steer) / self.WB)  # distance/2
+
+        return x, y, self.pi_2_pi(yaw)
 
     def move_Runge_Kutta(self, x_, y_, yaw_, v_, steer_, dt, a_=0., steer_rate_=0.):
 
@@ -220,7 +227,39 @@ class AckermannCarModel:
         y_ += dt * (k1_dy + 2 * k2_dy + 2 * k3_dy + k4_dy) / 6
         yaw_ += dt * (k1_dyaw + 2 * k2_dyaw + 2 * k3_dyaw + k4_dyaw) / 6
 
-        return x_, y_, yaw_
+        return x_, y_, self.pi_2_pi(yaw_)
+
+    def move_forklift_Runge_Kutta(self, x_, y_, yaw_, v_, steer_, dt, a_=0., steer_rate_=0.):
+
+        k1_dx = v_ * np.cos(yaw_) * np.cos(steer_)
+        k1_dy = v_ * np.sin(yaw_) * np.cos(steer_)
+        k1_dyaw = v_ / self.WB * np.sin(steer_)
+        k1_dv = a_
+        k1_dsteer = steer_rate_
+        # k1_da = jerk_
+
+        k2_dx = (v_ + 0.5 * dt * k1_dv) * np.cos(yaw_ + 0.5 * dt * k1_dyaw) * np.cos(steer_ + dt * k1_dsteer)
+        k2_dy = (v_ + 0.5 * dt * k1_dv) * np.sin(yaw_ + 0.5 * dt * k1_dyaw) * np.cos(steer_ + dt * k1_dsteer)
+        k2_dyaw = (v_ + 0.5 * dt * k1_dv) / self.WB * np.sin(steer_ + 0.5 * dt * k1_dsteer)
+        k2_dv = a_
+        k2_dsteer = steer_rate_
+        # k2_da = jerk_
+
+        k3_dx = (v_ + 0.5 * dt * k2_dv) * np.cos(yaw_ + 0.5 * dt * k2_dyaw) * np.cos(steer_ + dt * k2_dsteer)
+        k3_dy = (v_ + 0.5 * dt * k2_dv) * np.sin(yaw_ + 0.5 * dt * k2_dyaw) * np.cos(steer_ + dt * k2_dsteer)
+        k3_dyaw = (v_ + 0.5 * dt * k2_dv) / self.WB * np.sin(steer_ + 0.5 * dt * k2_dsteer)
+        k3_dv = a_  # + 0.5 * dt * k2_da
+        k3_dsteer = steer_rate_
+
+        k4_dx = (v_ + dt * k3_dv) * np.cos(yaw_ + dt * k3_dyaw) * np.cos(steer_ + dt * k3_dsteer)
+        k4_dy = (v_ + dt * k3_dv) * np.sin(yaw_ + dt * k3_dyaw) * np.cos(steer_ + dt * k3_dsteer)
+        k4_dyaw = (v_ + dt * k3_dv) / self.WB * np.sin(steer_ + dt * k3_dsteer)
+
+        x_ += dt * (k1_dx + 2 * k2_dx + 2 * k3_dx + k4_dx) / 6
+        y_ += dt * (k1_dy + 2 * k2_dy + 2 * k3_dy + k4_dy) / 6
+        yaw_ += dt * (k1_dyaw + 2 * k2_dyaw + 2 * k3_dyaw + k4_dyaw) / 6
+
+        return x_, y_, self.pi_2_pi(yaw_)
 
 
 def main():
@@ -230,8 +269,8 @@ def main():
     plt.axis('equal')
     car = AckermannCarModel()
     car.set_parameters(param)
-    # car.plot_car(x, y, yaw, steer=-0.4)
-    car.plot_forklift(x, y, yaw, steer=-0.4)
+    car.plot_car(x, y, yaw, steer=-0.4)
+    # car.plot_forklift(x, y, yaw, steer=-0.4)
     plt.show()
 
 

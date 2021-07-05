@@ -5,6 +5,7 @@ from gears.cubic_spline_planner import Spline2D
 from motion_plot.ackermann_motion_plot import UTurnMPC
 from Modell_Ackermann.casadi_reference_line import CasADi_MPC_reference_line
 from MPC_planning.HybridAStar.hybrid_a_star import HybridAStar
+from Modell_Ackermann.casadi_forklift import CasADi_MPC_reference_line_fortklift
 
 
 def hybrid_a_star_initialization(address, res):
@@ -68,14 +69,23 @@ def run_reference_line_mpc(param, ref_traj):
     warmup_time = time.time()
 
     forkplan = CasADi_MPC_reference_line()
+    forkplan.set_parameters(param)
     # forkplan.dt0 = 0.1
     # diff_s = np.diff(ref_traj[:2, :], axis=1)
     # sum_s = np.sum(np.hypot(diff_s[0], diff_s[1]))
     # forkplan.dt0 = 1.2 * (sum_s / forkplan.v_max + forkplan.v_max / forkplan.a_max) / ref_traj.shape[1]
+    # ref_traj = expand_path(ref_traj, forkplan.dt0 * forkplan.v_max * 1.)
 
-    ref_traj = expand_path(ref_traj, forkplan.dt0 * forkplan.v_max * 1)
+    forkplan.init_model_reference_line(ref_traj)
+    op_dt, op_trajectories, op_controls = forkplan.get_result_reference_line()
+
+    return op_dt, op_trajectories, op_controls
+
+
+def run_reference_line_mpc_forklift(param, ref_traj):
+    warmup_time = time.time()
+    forkplan = CasADi_MPC_reference_line_fortklift()
     forkplan.set_parameters(param)
-
     forkplan.init_model_reference_line(ref_traj)
     op_dt, op_trajectories, op_controls = forkplan.get_result_reference_line()
 
@@ -84,11 +94,8 @@ def run_reference_line_mpc(param, ref_traj):
 
 def main():
     address = "../config_forklift.yaml"
-    HOBCA_mpc = False
-    try_segment = False
     load_file = False
-
-    ds = 2 * 0.1
+    ds = 0.1
 
     if not load_file:
         ref_traj, param, obst = hybrid_a_star_initialization(address, ds)
@@ -101,15 +108,18 @@ def main():
             ut = UTurnMPC()
             ut.obmap.generate_polygon_map()
             ut.car.model_type = param["use_model_type"]
+            ut.car.set_parameters(param)
             ut.reserve_footprint = True
+            ut.use_Runge_Kutta = True
             start_time = time.time()
+            ut.obmap.show_obstacles = True
 
-            op_dt, op_trajectories, op_controls = run_reference_line_mpc(param, ref_traj)
-
+            # op_dt, op_trajectories, op_controls = run_reference_line_mpc(param, ref_traj)
+            op_dt, op_trajectories, op_controls = run_reference_line_mpc_forklift(param, ref_traj)
             print(" total time:{:.3f}s".format(time.time() - start_time))
             # np.savez("../data/smoothed_traj", dt=op_dt, traj=op_trajectories, control=op_controls, refpath=ref_traj)
 
-            ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj)
+            ut.plot_results(op_dt, op_trajectories, op_controls, ref_traj, four_states=True)
 
         else:
             print("Hybrid A Star initialization failed ....")
