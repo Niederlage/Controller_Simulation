@@ -306,23 +306,11 @@ class MPC_LQR_Controller:
             x0 = np.array([state.x, state.y, state.yaw, state.v, state.omega])
 
             if tick % int(alpha * self.window) == 0:
-                # current state
-                # print("tick:{}, start:{:.3f}, {:.3f}, {:.3f}, status: {:.3f},{:.3f}".format(tick, state.x, state.y,
-                #                                                                             state.yaw, state.v,
-                #                                                                             state.yaw))
-                # print("ref start:{}, {}".format(xref[0, 0], xref[1, 0]))
-                # print("tick:{}, ref goal:{}, {}".format(tick, xref[0, -1], xref[1, -1]))
                 smooth_traj = self.local_planner(x0, xref)
                 planlist.append(smooth_traj)
 
             pp = 0
             if tick % 1 == 0:
-                # for k in range(len(smooth_path)):
-                # print("tick:{}, fin plan status: {:.3f},{:.3f}".format(tick, smooth_control[0, -1],
-                #                                                        smooth_control[1, -1]))
-                #
-                # print("tick:{}, control: {:.3f},{:.3f}".format(tick, state.v, state.yaw))
-                # state, e, e_th = self.controller(state, smooth_control, smooth_path, e, e_th)
                 kk = tick % int(alpha * self.window)
                 # am, dm = self.iterative_linear_mpc_control(smooth_traj, x0, vm, om)
                 am, dm = self.linear_error_mpc_control(kk, smooth_traj, x0)
@@ -540,11 +528,11 @@ def main():
 
     load_file = False
     dl = 0.5
-    address = "../../config_differ_smoother.yaml"
+    address = "../config_differ_smoother.yaml"
     with open(address, 'r', encoding='utf-8') as f:
         param = yaml.load(f)
     ut = UTurnMPC()
-    ut.set_parameters(param)
+    # ut.set_parameters(param)
     mpclqr = MPC_LQR_Controller()
 
     if not load_file:

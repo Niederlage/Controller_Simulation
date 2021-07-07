@@ -199,7 +199,7 @@ def main():
     ut.use_Runge_Kutta = False
     start_time = time.time()
     ut.obmap.show_obstacles = True
-    if start[0] < 1.:
+    if start[0] < -4.:
         ref_traj = spline_reference(start, goal, ds)
     else:
         ref_traj = hybrid_a_star_reference(start, goal, param, ds)

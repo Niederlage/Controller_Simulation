@@ -35,8 +35,8 @@ class CasADi_MPC_differ_Control:
     def get_A(self, vr, yawr, dt):
         A = ca.DM.eye(5)
         A[0, 2] = - vr * ca.sin(yawr) * dt
-        A[1, 3] = vr * ca.cos(yawr) * dt
-        A[1, 2] = ca.cos(yawr) * dt
+        A[1, 2] = vr * ca.cos(yawr) * dt
+        A[0, 2] = ca.cos(yawr) * dt
         A[1, 3] = ca.sin(yawr) * dt
         A[2, 4] = dt
         return A
@@ -53,7 +53,7 @@ class CasADi_MPC_differ_Control:
             else:
                 p = k + i
 
-            alpha = alpha @ self.get_A(vr_[p], yawr_[p], dt)
+            alpha = self.get_A(vr_[p], yawr_[p], dt) @ alpha
             A_bk[5 * i:5 * (i + 1), :] = alpha
         return A_bk
 
@@ -66,23 +66,24 @@ class CasADi_MPC_differ_Control:
         Bk[4, 1] = dt
         lpath = len(vr_)
         for j in range(self.horizon):
-            alpha = ca.DM.eye(5)
             ll = list(range(j + 1))[::-1]
             for i in ll:
-                B_bk[5 * j:5 * (j + 1), 2 * i:2 * (i + 1)] = alpha @ Bk
-                print(j)
-                if (k + i >= lpath):
-                    p = lpath
+                if i == j:
+                    B_bk[5 * j:5 * (j + 1), 2 * i:2 * (i + 1)] = Bk
                 else:
-                    p = k + i
-                alpha = alpha @ self.get_A(vr_[p], yawr_[p], dt)
+                    if (k + i >= lpath):
+                        p = lpath
+                    else:
+                        p = k + i
+                    B_bk[5 * j:5 * (j + 1), 2 * i:2 * (i + 1)] = self.get_A(vr_[p], yawr_[p], dt) \
+                                                                 @ B_bk[5 * (j - 1):5 * j, 2 * i:2 * (i + 1)]
 
         return B_bk
 
     def get_linear_model_matrix(self, k, state, refpath, dt):
         A_ = self.get_A_bk(k, refpath, dt)
         B_ = self.get_B_bk(k, refpath, dt)
-        print(B_)
+        # print(B_)
         Q_ = ca.DM.eye(5 * self.horizon)
         R_ = ca.DM.eye(2 * self.horizon)
         beta = 0.8
@@ -158,17 +159,15 @@ class CasADi_MPC_differ_Control:
         op_trajectories = np.array(cal_traj)
         return op_trajectories
 
-
 def main():
     start_time = time.time()
 
-    address = "../../config_OBCA_large.yaml"
+    address = "../config_OBCA_large.yaml"
     with open(address, 'r', encoding='utf-8') as f:
         param = yaml.load(f)
 
     # states: (x ,y ,theta ,v , steer, a, steer_rate, jerk)
     cmpc = CasADi_MPC_differ_Control()
-
 
 if __name__ == '__main__':
     dt = 0.1
