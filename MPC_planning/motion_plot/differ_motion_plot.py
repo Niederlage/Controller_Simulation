@@ -79,70 +79,22 @@ class UTurnMPC():
 
             return np.array([x_, y_, yaw_])
 
-    # def plot_robot(self, x, y, yaw):  # pragma: no cover
-    #
-    #     outline = np.array([
-    #         [self.LF, self.LF, -self.LB, -self.LB, self.LF],
-    #         [self.W / 2, -self.W / 2, - self.W / 2, self.W / 2, self.W / 2]])
-    #
-    #     Rot1 = np.array([[np.cos(yaw), -np.sin(yaw)],
-    #                      [np.sin(yaw), np.cos(yaw)]])
-    #     outline = Rot1 @ outline
-    #     outline[0, :] += x
-    #     outline[1, :] += y
-    #     plt.plot(np.array(outline[0, :]).flatten(),
-    #              np.array(outline[1, :]).flatten(), "-", color='cadetblue')
-    #     if self.plot_arrows:
-    #         arrow_x, arrow_y, arrow_yaw = x, y, yaw
-    #         self.plot_arrow(arrow_x, arrow_y, arrow_yaw)
+    def plot_op_controls(self, v_, acc_, jerk_, yaw_, omega_, omega_rate_):
 
-    def plot_op_controls(self, timeline, v_, acc_, jerk_, yaw_, omega_, omega_rate_):
         fig = plt.figure()
         ax = plt.subplot(211)
-        ax.plot(timeline, v_, label="v", color="red")
-        ax.plot(timeline, acc_, "-.", label="acc")
-        ax.plot(timeline, jerk_, "-.", label="jerk")
+        ax.plot(v_, label="v", color="red")
+        ax.plot(acc_, "-.", label="acc")
+        ax.plot(jerk_, "-.", label="jerk")
         ax.grid()
         ax.legend()
 
         ax = plt.subplot(212)
-        ax.plot(timeline, yaw_ * 180 / np.pi, label="heading/grad")
-        ax.plot(timeline, omega_ * 180 / np.pi, label="omega/grad")
-        ax.plot(timeline, omega_rate_ * 180 / np.pi, "-.", label="omega rate/grad")
+        ax.plot(yaw_ * 180 / np.pi, label="heading/grad")
+        ax.plot(omega_ * 180 / np.pi, label="omega/grad")
+        ax.plot(omega_rate_ * 180 / np.pi, "-.", label="omega rate/grad")
         ax.grid()
         ax.legend()
-
-    def plot_regelung(self, fig, k):
-        if k > 0:
-            plt.close(fig)
-        ax = plt.subplot(211)
-        ax.plot(self.u_regelung[0, :k], label="delta_a", color="red")
-        ax.grid()
-        ax.set_title("delta_a")
-        # ax.legend()
-
-        ax = plt.subplot(212)
-        ax.plot(self.u_regelung[1, :k] * 180 / np.pi, label="delta_steer")
-        ax.set_title("delta_steer")
-        ax.grid()
-
-        plt.pause(0.001)
-
-    def lqr_regler(self, zst, u_in, k):
-        if k == 0:
-            state = np.block([zst, u_in[:2, k]])
-        else:
-            state = np.block([zst, u_in[:2, k]])
-
-        ref_state = np.block([self.predicted_trajectory[:3, k], u_in[:2, k]])
-        u_regelung = -self.ctrl.cal_mat_K(self.ctrl.x_s, self.dt) @ (state - ref_state)
-
-        if abs(u_regelung[0]) > 4:
-            u_regelung[0] = np.sign(u_regelung[0]) * 4
-        if abs(u_regelung[1]) > 40 * np.pi / 180:
-            u_regelung[1] = np.sign(u_regelung[1]) * 40 * np.pi / 180
-        self.u_regelung[:, k] = u_regelung
-        return u_regelung
 
     def try_tracking(self, zst, u_op, trajectory, ref_traj=None):
         k = 0
@@ -190,7 +142,7 @@ class UTurnMPC():
 
         return trajectory
 
-    def plot_results(self, op_dt, horizon, op_trajectories, op_controls, ref_traj, four_states=False):
+    def plot_results_(self, op_dt, horizon, op_trajectories, op_controls, ref_traj, four_states=False):
         timeline = np.arange(0, horizon, op_dt)
         self.predicted_trajectory = op_trajectories
         zst = ref_traj[:, 0]
@@ -220,9 +172,44 @@ class UTurnMPC():
             omega_rate_ = op_controls[3, :]
             jerk_ = op_controls[4, :]
 
-        self.plot_op_controls(timeline, v_, acc_, jerk_, yaw_, omega_, omega_rate_)
+        self.plot_op_controls(v_, acc_, jerk_, yaw_, omega_, omega_rate_)
 
         trajectory = self.try_tracking(zst, op_controls, trajectory, ref_traj=ref_traj)
+
+    def plot_results_differ(self, op_dt, op_trajectories, op_controls, ref_traj, four_states=False):
+
+        self.predicted_trajectory = op_trajectories
+        zst = ref_traj[:, 0]
+        trajectory = np.copy(zst)
+
+        self.cal_distance(op_trajectories[:2, :], len(ref_traj.T))
+        self.dt = op_dt
+        print("Time resolution:{:.3f}s, total time:{:.3f}s".format(self.dt, self.dt * len(op_trajectories.T)))
+        yaw_ = op_trajectories[2, :]
+        # omega_ = np.diff(yaw_) / op_dt
+        # omega_rate_ = np.append(0., omega_)
+
+        v_ = op_controls[0, :]
+        omega_ = op_controls[1, :]
+        #
+
+        if four_states:
+            omega_rate = np.diff(op_controls[1, :]) / op_dt
+            omega_rate_ = np.append(0., omega_rate)
+            acc_ = np.diff(v_) / op_dt
+            acc_ = np.append(0., acc_)
+
+            jerk = np.diff(acc_) / op_dt
+            jerk_ = np.append(0., jerk)
+        else:
+            acc_ = op_controls[2, :]
+            omega_rate_ = op_controls[3, :]
+            jerk_ = op_controls[4, :]
+
+        self.plot_op_controls(v_, acc_, jerk_, yaw_, omega_, omega_rate_)
+
+        trajectory = self.try_tracking(zst, op_controls, trajectory, ref_traj=ref_traj)
+        self.show_plot()
 
     def show_plot(self):
         print("Done")

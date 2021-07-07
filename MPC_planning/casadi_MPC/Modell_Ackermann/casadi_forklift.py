@@ -25,7 +25,7 @@ class CasADi_MPC_reference_line_fortklift:
 
         self.wg = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 1e1, 1e2, 1e3]
         self.v_max = 2.
-        self.steer_max = ca.pi * 90 / 180
+        self.steer_max = ca.pi * 60 / 180
         self.omega_max = ca.pi
         self.a_max = 3.
         self.steer_rate_max = ca.pi * 120 / 180
@@ -162,15 +162,15 @@ class CasADi_MPC_reference_line_fortklift:
         ubx[2, 0] = refpath[2, 0]
         ubx[3:, 0] = 0.
 
-        lbx[0, -1] = refpath[0, -1] - 5e-1
-        lbx[1, -1] = refpath[1, -1] - 5e-1
-        lbx[2, -1] = refpath[2, -1] - 10 * ca.pi / 180
+        lbx[0, -1] = refpath[0, -1]
+        lbx[1, -1] = refpath[1, -1]
+        lbx[2, -1] = refpath[2, -1]
         # lbx[2, -str_idx:] = refpath[2, -1] - 1e1
         lbx[3:, -1] = 0.
 
-        ubx[0, -1] = refpath[0, -1] + 5e-1
-        ubx[1, -1] = refpath[1, -1] + 5e-1
-        ubx[2, -1] = refpath[2, -1] + 10 * ca.pi / 180
+        ubx[0, -1] = refpath[0, -1]
+        ubx[1, -1] = refpath[1, -1]
+        ubx[2, -1] = refpath[2, -1]
         # ubx[2, -str_idx:] = refpath[2, -1] + 1e-1
         ubx[3:, -1] = 0.
 
@@ -300,18 +300,25 @@ class CasADi_MPC_reference_line_fortklift:
                 sum_v_rate += ca.sumsqr((x[3, i] - x[3, i - 1]) / dt)
                 sum_steer_rate += ca.sumsqr((x[4, i] - x[4, i - 1]) / dt)
 
-        obj = self.wg[0] * sum_v \
-              + self.wg[4] * sum_steer \
+        obj = self.wg[3] * sum_v \
+              + self.wg[6] * sum_steer \
               + self.wg[0] * sum_v_rate \
-              + self.wg[4] * sum_steer_rate \
+              + self.wg[1] * sum_steer_rate \
               + self.wg[9] * sum_time \
               + self.wg[6] * sum_total_dist \
-              + self.wg[8] * sum_dist_to_ref \
-              + self.wg[5] * sum_angle_error
+              + self.wg[5] * sum_dist_to_ref \
+              + self.wg[8] * sum_angle_error
 
         # + self.wg[9] * ca.sumsqr(x[2, -str_idx:] - ref_path[2, -1]) \
 
         return obj
+
+    def is_reverse(self, v1, th):
+        xp = v1[0] * np.cos(th) + v1[1] * np.sin(th)
+        if xp < 0:
+            return True
+        else:
+            return False
 
     def states_initialization(self, reference_path):
         x0 = ca.DM(self.nx, self.horizon)
@@ -324,9 +331,12 @@ class CasADi_MPC_reference_line_fortklift:
             x0[1, i] = reference_path[1, i]
             x0[2, i] = reference_path[2, i]
             if i > 1:
-                ds = np.linalg.norm(reference_path[:2, i] - reference_path[:2, i - 1])
+                vec = reference_path[:2, i] - reference_path[:2, i - 1]
+                ds = np.linalg.norm(vec)
+                if self.is_reverse(vec, reference_path[2, i]):
+                    ds *= -1
                 dyaw = reference_path[2, i] - reference_path[2, i - 1]
-                steer = ca.atan2(dyaw * self.base / ds, 1)
+                steer = ca.atan2(dyaw * self.base, ds)
                 x0[4, i] = steer
                 x0[3, i] = ds / self.dt0
                 if not self.reduce_states:
@@ -338,7 +348,7 @@ class CasADi_MPC_reference_line_fortklift:
                 last_v = x0[3, i]
                 last_steer = x0[4, i]
                 last_a = x0[5, i]
-        x0[2, 0] = reference_path[2, 0]
+        # x0[2, 0] = reference_path[2, 0]
         if self.op_control0 is not None:
             x0[3:, :] = self.op_control0
 

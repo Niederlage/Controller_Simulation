@@ -43,7 +43,8 @@ class UTurnMPC():
     def plot_op_controls(self, v_, acc_, jerk_, yaw_, yaw_rate_, steer_, steer_rate_, four_states=True):
         fig = plt.figure()
         ax = plt.subplot(211)
-        ax.plot(v_, label="v", color="red")
+        ax.plot(v_, label="v_front_wheel", color="red")
+        ax.plot(v_ * np.cos(steer_), label="v_center")
         ax.plot(acc_, "-.", label="acc")
         if not four_states:
             ax.plot(jerk_, "-.", label="jerk")
@@ -52,7 +53,7 @@ class UTurnMPC():
 
         ax = plt.subplot(212)
         ax.plot(yaw_ * 180 / np.pi, label="heading/grad")
-        # ax.plot(yaw_rate_ * 180 / np.pi, label="yaw rate/grad")
+        ax.plot(yaw_rate_ * 180 / np.pi, label="yaw rate/grad")
         ax.plot(steer_ * 180 / np.pi, label="steer/grad", color="red")
         if not four_states:
             ax.plot(steer_rate_ * 180 / np.pi, "-.", label="steer rate/grad")
@@ -71,7 +72,7 @@ class UTurnMPC():
             self.obmap.plot_obst(ax)
 
         if ref_traj is not None:
-            plt.plot(ref_traj[0, 1:], ref_traj[1, 1:], "-", color="orange", label="warm start reference")
+            plt.plot(ref_traj[0, 1:], ref_traj[1, 1:], "-", color="#FF1493", label="warm start reference")
 
         ax.plot(self.predicted_trajectory[0, :], self.predicted_trajectory[1, :], "xg", label="MPC prediciton")
         ax.plot(trajectory[:, 0], trajectory[:, 1], "-r")
@@ -100,7 +101,7 @@ class UTurnMPC():
         while True:
             u_in = u_op[:, k]
 
-            zst = self.ackermann_motion_model(zst, u_in, self.dt, Runge_Kutta=self.use_Runge_Kutta )  # simulate robot
+            zst = self.ackermann_motion_model(zst, u_in, self.dt, Runge_Kutta=self.use_Runge_Kutta)  # simulate robot
             trajectory = np.vstack((trajectory, zst))  # store state history
 
             if self.show_animation:

@@ -123,8 +123,8 @@ class AckermannCarModel:
         plt.plot(wheel_outline_x, wheel_outline_y, wheel_color)
 
     def plot_wheels(self, x, y, yaw, steer):
-        self.plot_wheel(x, y, yaw, 0., 0.75 * self.W / 2)
-        self.plot_wheel(x, y, yaw, 0., -0.75 * self.W / 2)
+        # self.plot_wheel(x, y, yaw, 0., 0.75 * self.W / 2)
+        # self.plot_wheel(x, y, yaw, 0., -0.75 * self.W / 2)
         self.plot_wheel(x, y, yaw, self.WB, 0., steer=steer, wheel_color="darkorange")
 
     def plot_robot(self, x, y, yaw, steer=0.):

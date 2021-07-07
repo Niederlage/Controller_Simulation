@@ -3,13 +3,16 @@ LF: 3.0
 LB: 1.0
 W: 2.0
 use_model_type: car
+x_max: 12
+y_max: 15
+
 start:
   - -8.5  # x end   - -7.5  # x end
-  - 10 # y end - 7.5 # y end
+  - 7.5 # y end - 7.5 # y end
   - 0. # theta end - 0. # theta end
 goal: # goal with angle
-  - -0.6  # x end - -0.8  # x end
-  - 1.5 # y end - 1.5 # y end
+  - 0.  # x end - -0.8  # x end
+  - -1. # y end - 1.5 # y end
   - 90. # theta end   - 90. # theta end
 ref_v: 1.5
 dt: 0.1

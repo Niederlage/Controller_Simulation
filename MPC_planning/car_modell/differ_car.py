@@ -41,6 +41,22 @@ class DifferCarModel:
         self.wheelY = [self.wheel_width / 2, -self.wheel_width / 2, -self.wheel_width / 2, self.wheel_width / 2,
                        self.wheel_width / 2]
 
+    def set_parameters(self, param):
+        self.WB = param["base"]
+        self.LF = param["LF"]  # distance from rear to vehicle front end
+        self.LB = param["LB"]  # distance from rear to vehicle back end
+        self.W = param["W"]
+        self.SAFE_FRONT = self.LF
+        self.SAFE_BACK = self.LB
+        self.SAFE_WIDTH = self.W
+        self.W_BUBBLE_DIST = (self.LF - self.LB) / 2.0
+        self.W_BUBBLE_R = sqrt(((self.LF + self.LB) / 2.0) ** 2 + 1)
+        #
+        self.VRX = [self.LF, -self.LB, -self.LB, self.LF, self.LF]  #
+        self.VRY = [self.W / 2, self.W / 2, -self.W / 2, -self.W / 2,
+                    self.W / 2, -self.W / 2, -self.W / 2, self.W / 2]
+        print("")
+
     def pi_2_pi(self, angle):
         return (angle + np.pi) % (2 * np.pi) - np.pi
 

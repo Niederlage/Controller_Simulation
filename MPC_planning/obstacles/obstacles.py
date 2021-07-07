@@ -4,9 +4,11 @@ import matplotlib.pyplot as plt
 
 class Obstacles:
     def __init__(self):
-        self.resolution = 0.1
-        self.bounds_left_down = [-4.5, -5.5]
+        self.resolution = 0.2
+        self.bounds_left_down = [-2., -5.5]
         self.bounds_right_up = [4.5, 5.5]
+        # self.bounds_left_down = [-15., -5.]
+        # self.bounds_right_up = [15., 20.]
         self.bounds = self.get_bounds()
 
         self.obst_keypoints = None
@@ -122,16 +124,16 @@ class Obstacles:
         self.obst_pointmap = self.get_point_map(obst_, 0.2)
 
     def generate_polygon_map(self):
-        xoffset = 3.8
-        yoffset = -0.6
+        xoffset = 3.
+        yoffset = -0.55
 
         obst1 = np.array([[xoffset, yoffset],
-                          [xoffset + .5, yoffset],
-                          [xoffset + .5, yoffset + .05],
+                          [xoffset + 1.3, yoffset],
+                          [xoffset + 1.3, yoffset + .05],
                           [xoffset, yoffset + .05],
-                          [xoffset + .5, yoffset]])
+                          [xoffset + .8, yoffset]])
 
-        tf_1 = np.array([0, 1., 0])
+        tf_1 = np.array([0, 1.05, 0])
         obst2 = self.Euclidean_Transform(obst1, tf_1)
 
         tf_2 = np.array([15 / 10, 0.5])[:, None]
@@ -240,7 +242,9 @@ class Obstacles:
             plt.savefig("fig1.png")
 
     def save_obmap(self):
-        np.savez("../data/saved_obmap.npz",
+        savepath = "../data/saved_obmap.npz"
+        # savepath = "../data/saved_obmap_obca.npz"
+        np.savez(savepath,
                  constraint_mat=self.coeff_mat,
                  pointmap=self.obst_pointmap,
                  polygons=self.obst_keypoints)

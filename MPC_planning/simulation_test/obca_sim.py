@@ -1,4 +1,6 @@
 import time
+
+import matplotlib.pyplot as plt
 import numpy as np
 import yaml
 from gears.cubic_spline_planner import Spline2D
@@ -6,15 +8,15 @@ from motion_plot.ackermann_motion_plot import UTurnMPC
 from Modell_Ackermann.casadi_TDROBCA import CasADi_MPC_TDROBCA
 from Modell_Ackermann.casadi_OBCA_warmup import CasADi_MPC_WarmUp
 from MPC_planning.HybridAStar.hybrid_a_star import HybridAStar
+from Modell_Differential.casadi_differ_TDROBCA import CasADi_MPC_differ_TDROBCA
 
 
-def hybrid_a_star_initialization(ut):
-    # path = "../config_OBCA_large.yaml"
-    path = "../config_forklift.yaml"
+def hybrid_a_star_initialization(ut, path):
     with open(path, 'r', encoding='utf-8') as f:
         param = yaml.load(f)
 
     coarse_planner = HybridAStar()
+    coarse_planner.MOTION_RESOLUTION = 0.2
     coarse_planner.show_animation = False
     sx = param["start"]
     ex = param["goal"]
@@ -22,7 +24,7 @@ def hybrid_a_star_initialization(ut):
     goal = [ex[0], ex[1], np.deg2rad(ex[2])]
     coarse_planner.car.set_parameters(param)
     traj_adress = "../data/saved_hybrid_a_star.npz"
-    map_adress = "../data/saved_obmap.npz"
+    map_adress = "../data/saved_obmap_obca.npz"
 
     samples = np.zeros((1, 2))
     ref_traj, obpoints, obst = ut.initialize_saved_data(traj_adress=traj_adress,
@@ -41,6 +43,15 @@ def hybrid_a_star_initialization(ut):
         y = path.y_list
         yaw = path.yaw_list
         saved_path = np.array([x, y, yaw])
+
+        f2 = plt.figure()
+        ax = f2.add_subplot(111)
+        plt.plot(obpoints[0], obpoints[1], ".k")
+        plt.plot(x, y, "-r", label="Hybrid A* path")
+        plt.grid(True)
+        plt.axis("equal")
+        plt.show()
+
     else:
         saved_path = None
 
@@ -137,8 +148,31 @@ def run_TDROBCA_mpc(param, ref_traj, shape, obst):
     return op_dt, op_trajectories, op_controls
 
 
+def run_differ_TDROBCA_mpc(param, ref_traj, shape, obst):
+    warmup_time = time.time()
+
+    obca = CasADi_MPC_differ_TDROBCA()
+    obca.get_dt(ref_traj)
+    print("cal dt:", obca.dt0)
+    obca.dt0 = 0.1
+    obca.set_parameters(param)
+    obca.init_model_OBCA(ref_traj, shape, obst)
+    op_dt, op_trajectories, op_controls, op_lambda, op_mu, op_d = obca.get_result_OBCA()
+    f = plt.Figure()
+    plt.plot(op_d[0, :], label="d1")
+    plt.plot(op_d[1, :], label="d2")
+    plt.plot(op_d[2, :], label="d3")
+    plt.grid()
+    plt.legend()
+    plt.show()
+    # plt.plot(op_d[3, :], label="d1")
+
+    return op_dt, op_trajectories, op_controls
+
+
 def main():
-    address = "../../config_OBCA_large.yaml"
+    path = "../config_OBCA_large.yaml"
+    # path = "../config_forklift.yaml"
     HOBCA_mpc = False
     try_segment = False
     load_file = False
@@ -147,7 +181,7 @@ def main():
     ut = UTurnMPC()
 
     if not load_file:
-        ref_traj, param, obst, ob_points = hybrid_a_star_initialization(ut)
+        ref_traj, param, obst, ob_points = hybrid_a_star_initialization(ut, path)
         # ref_traj = ref_path
         if len(ref_traj.T) > 500:
             ref_traj = None
@@ -162,7 +196,8 @@ def main():
             if try_segment:
                 op_dt, op_trajectories, op_controls = run_segment_OBCA_mpc(param, ref_traj, shape, obst)
             else:
-                op_dt, op_trajectories, op_controls = run_TDROBCA_mpc(param, ref_traj, shape, obst)
+                # op_dt, op_trajectories, op_controls = run_TDROBCA_mpc(param, ref_traj, shape, obst)
+                op_dt, op_trajectories, op_controls = run_differ_TDROBCA_mpc(param, ref_traj, shape, obst)
 
             print("warm up OBCA total time:{:.3f}s".format(time.time() - start_time))
             # np.savez("../data/smoothed_traj", dt=op_dt, traj=op_trajectories, control=op_controls, refpath=ref_traj)

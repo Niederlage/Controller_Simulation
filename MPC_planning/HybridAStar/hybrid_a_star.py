@@ -31,15 +31,16 @@ class HybridAStar:
     def __init__(self):
         self.XY_GRID_RESOLUTION = 1  # [ m / grid]
         self.YAW_GRID_RESOLUTION = np.deg2rad(1.0)  # [rad/ grid]
-        self.MOTION_RESOLUTION = 0.01  # [m/ grid] path interpolate resolution
+        self.MOTION_RESOLUTION = 0.2  # [m/ grid] path interpolate resolution
         self.N_STEER = 15  # number of steer command
         self.ROBOT_RADIUS = 0.8  # robot radius
 
-        self.SB_COST = 1e-1  # switch back penalty cost
-        self.BACK_COST = 1e-3  # backward penalty cost
-        self.STEER_CHANGE_COST = 1e8  # steer angle change penalty cost
+        # perfect param
+        self.SB_COST = 1e5  # switch back penalty cost
+        self.BACK_COST = 1e1  # backward penalty cost
+        self.STEER_CHANGE_COST = 1e6  # steer angle change penalty cost
         self.STEER_COST = 1e4  # steer angle change penalty cost
-        self.H_COST = 1e3  # Heuristic cost
+        self.H_COST = -1e1  # Heuristic cost
         self.rs = ReedsSheppPathPlanning()
         self.car = AckermannCarModel()
         self.dph = DynamicProgrammingHeuristic()
@@ -448,7 +449,7 @@ def get_s(ref_path):
 def main():
     planner = HybridAStar()
     start, goal, obst = planner.init_startpoints(address)
-    start = get_start_point()
+    # start = get_start_point()
 
     fig = plt.figure()
     ax = fig.add_subplot(111)
@@ -482,7 +483,7 @@ def main():
             plt.axis("equal")
             planner.car.plot_car(i_x, i_y, i_yaw)
             k += 1
-            if k % 1 == 0:
+            if k % 2 == 0:
                 plt.pause(0.001)
 
     print(__file__ + " done!!")

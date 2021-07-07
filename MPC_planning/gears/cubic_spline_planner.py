@@ -15,6 +15,7 @@ class Spline:
     """
 
     def __init__(self, x, y):
+
         self.b, self.c, self.d, self.w = [], [], [], []
 
         self.x = x
@@ -133,6 +134,7 @@ class Spline2D:
     """
 
     def __init__(self, x, y):
+        self.is_reversed = False
         self.s = self.__calc_s(x, y)
         self.sx = Spline(self.s, x)
         self.sy = Spline(self.s, y)
@@ -175,6 +177,7 @@ class Spline2D:
         dx = self.sx.calcd(s)
         dy = self.sy.calcd(s)
         yaw = self.mod_angle(math.atan2(dy, dx))
+
         return yaw
 
 
