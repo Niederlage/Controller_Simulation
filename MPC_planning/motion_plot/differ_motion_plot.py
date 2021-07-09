@@ -125,6 +125,7 @@ class UTurnMPC():
                 ax.plot(ref_traj[0, -1], ref_traj[1, -1], "xb")
                 ax.plot(self.predicted_trajectory[0, -1], self.predicted_trajectory[1, -1], "x", color="purple")
                 self.car.plot_car(zst[0], zst[1], zst[2])
+                self.obmap.plot_obst(ax)
 
                 plt.axis("equal")
                 plt.grid(True)

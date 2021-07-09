@@ -22,10 +22,10 @@ except Exception:
 from obstacles.obstacles import Obstacles
 
 # address = "../config_differ_smoother.yaml"
-address = "../config_forklift.yaml"
-# address = "../config_OBCA_large.yaml"
+# address = "../config_forklift.yaml"
+address = "../config_OBCA_large.yaml"
 obmap_address = "../data/saved_obmap.npz"
-
+# obmap_address = "../data/saved_obmap_obca.npz"
 
 class HybridAStar:
     def __init__(self):
@@ -34,13 +34,19 @@ class HybridAStar:
         self.MOTION_RESOLUTION = 0.2  # [m/ grid] path interpolate resolution
         self.N_STEER = 15  # number of steer command
         self.ROBOT_RADIUS = 0.8  # robot radius
-
-        # perfect param
-        self.SB_COST = 1e5  # switch back penalty cost
-        self.BACK_COST = 1e1  # backward penalty cost
-        self.STEER_CHANGE_COST = 1e6  # steer angle change penalty cost
-        self.STEER_COST = 1e4  # steer angle change penalty cost
-        self.H_COST = -1e1  # Heuristic cost
+        obca = True
+        if obca:
+            self.SB_COST = 1e5 # switch back penalty cost
+            self.BACK_COST = 1e5  # backward penalty cost
+            self.STEER_CHANGE_COST = 1e1  # steer angle change penalty cost
+            self.STEER_COST = 1e3  # steer angle change penalty cost
+        else:
+            # perfect param
+            self.SB_COST = 1e5  # switch back penalty cost
+            self.BACK_COST = 1e1  # backward penalty cost
+            self.STEER_CHANGE_COST = 1e6  # steer angle change penalty cost
+            self.STEER_COST = 1e4  # steer angle change penalty cost
+        self.H_COST = 1e1  # Heuristic cost
         self.rs = ReedsSheppPathPlanning()
         self.car = AckermannCarModel()
         self.dph = DynamicProgrammingHeuristic()
@@ -258,8 +264,8 @@ class HybridAStar:
                 plt.gcf().canvas.mpl_connect(
                     'key_release_event',
                     lambda event: [exit(0) if event.key == 'escape' else None])
-                if len(closedList.keys()) % 1000 == 0:
-                    plt.pause(0.0001)
+                if len(closedList.keys()) % 10 == 0:
+                    plt.pause(0.01)
 
             is_updated, final_path = self.update_node_with_analytic_expansion(
                 current, goal_node, config, obst[0], obst[1], obstacle_kd_tree)
@@ -342,7 +348,7 @@ class HybridAStar:
                 samples = np.vstack((samples, ob))
 
             samples = np.delete(samples, 0, axis=0)
-            bounds = self.obmap.get_bounds()
+            bounds = load["bounds"]
             self.obmap.obst_pointmap = load["pointmap"]
             return np.vstack([samples, bounds]).T
             # return bounds.T
@@ -473,7 +479,7 @@ def main():
         k = 0
 
         f2 = plt.figure()
-        ax = fig.add_subplot(111)
+        # ax = fig.add_subplot(111)
         for i_x, i_y, i_yaw in zip(path.x_list, path.y_list, path.yaw_list):
             # plt.cla()
             plt.plot(obst[0], obst[1], ".k")

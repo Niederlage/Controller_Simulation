@@ -4,11 +4,13 @@ import yaml
 from gears.cubic_spline_planner import Spline2D
 from motion_plot.ackermann_motion_plot import UTurnMPC
 # from motion_plot.differ_motion_plot import UTurnMPC
-from MPC_planning.HybridAStar.hybrid_a_star import HybridAStar
+from HybridAStar.hybrid_a_star import HybridAStar
 from Modell_Ackermann.casadi_forklift import CasADi_MPC_reference_line_fortklift
 from Modell_Differential.casadi_differ_reference_line_forklift import CasADi_MPC_differ_forklift
 from Modell_Differential.casadi_differ_TDROBCA import CasADi_MPC_differ_TDROBCA
 import matplotlib.pyplot as plt
+
+offset = 0.
 
 
 def initialize(address):
@@ -17,11 +19,14 @@ def initialize(address):
 
     sx = param["start"]
     ex = param["goal"]
-    start = np.array([sx[0], sx[1], sx[2] * np.pi / 180])
-    goal = np.array([ex[0], ex[1], ex[2] * np.pi / 180])
-    # if goal[0] - start[0] < 0 and abs(start[2]) > np.pi / 2:
-    #     start[2] = normalize_angle(start[2])
-    #     goal[2] = normalize_angle(goal[2])
+    start = np.array([sx[0], sx[1] + offset, sx[2] * np.pi / 180])
+    goal = np.array([ex[0], ex[1] + offset, ex[2] * np.pi / 180])
+
+    if goal[1] - start[1] < 0 and abs(goal[2]) == np.pi:
+        goal[2] = np.pi * 0.99
+
+    elif goal[1] - start[1] > 0 and abs(goal[2]) == np.pi:
+        goal[2] = -np.pi * 0.99
 
     print("start:", start, "\ngoal:", goal)
     return start, goal, param
@@ -76,7 +81,7 @@ def plot_curve(refpath, curve_name):
 
 
 def set_control_points(start, goal):
-    lds = 0.5
+    lds = 1.5
     start2 = np.array([start[0] + lds * np.cos(start[2]), start[1] + lds * np.sin(start[2])])
     goal2 = np.array([goal[0] + lds * np.cos(goal[2]), goal[1] + lds * np.sin(goal[2])])
 
@@ -127,6 +132,7 @@ def hybrid_a_star_reference(start, goal, param, res):
     coarse_planner.car.set_parameters(param)
     coarse_planner.obmap.generate_polygon_map()
     obst = coarse_planner.generate_obmap()
+    obst[1, :] += offset
     path = coarse_planner.hybrid_a_star_planning(start, goal, obst)
 
     if path is not None:
@@ -179,6 +185,7 @@ def run_reference_line_mpc_forklift(param, ref_traj):
     # forkplan = CasADi_MPC_reference_line_fortklift()
     forkplan = CasADi_MPC_differ_forklift()
     forkplan.set_parameters(param)
+    # ref_traj[2, 27:] = np.pi
     forkplan.init_model_reference_line(ref_traj[:, 0], ref_traj)
     op_dt, op_trajectories, op_controls = forkplan.get_result_reference_line()
 
@@ -199,12 +206,13 @@ def main():
     ut.use_Runge_Kutta = False
     start_time = time.time()
     ut.obmap.show_obstacles = True
-    if start[0] < -4.:
+
+    if start[0] < 1. and abs(start[2]) > np.pi / 2:
         ref_traj = spline_reference(start, goal, ds)
     else:
         ref_traj = hybrid_a_star_reference(start, goal, param, ds)
 
-    plot_tf_curves(start, goal, ref_traj)
+    # plot_tf_curves(start, goal, ref_traj)
     tf_path = coordinate_transform(start[2], start[:2], ref_traj, "world to body")
 
     if ref_traj is not None:
@@ -213,9 +221,9 @@ def main():
         op_dt, op_trajectories, op_controls = run_reference_line_mpc_forklift(param, tf_path)
         tf_back_oppath = coordinate_transform(start[2], start[:2], op_trajectories, "body to world")
         print(" total time:{:.3f}s".format(time.time() - start_time))
-
+        # op_controls[1, :] *= -1
         ut.plot_results(op_dt, tf_back_oppath, op_controls, ref_traj, four_states=True)
-        # ut.plot_results_differ(op_dt, op_trajectories, op_controls, ref_traj, four_states=True)
+        # ut.plot_results_differ(op_dt, tf_back_oppath, op_controls, ref_traj, four_states=True)
 
     else:
         print("Hybrid A Star initialization failed ....")

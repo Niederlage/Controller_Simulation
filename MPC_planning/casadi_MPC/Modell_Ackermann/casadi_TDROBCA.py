@@ -242,13 +242,13 @@ class CasADi_MPC_TDROBCA:
                 sum_v_rate += ca.sumsqr((x_[3, i] - x_[3, i - 1]) / dt)
                 sum_steer_rate += ca.sumsqr((x_[4, i] - x_[4, i - 1]) / dt)
 
-        obj = - 9 * self.wg[8] * sum_mindist \
-              + self.wg[3] * sum_reference \
+        obj = - 90 * self.wg[3] * sum_mindist \
+              + 5 * self.wg[4] * sum_reference \
               + 5 * self.wg[5] * sum_time \
               + self.wg[2] * sum_v \
               + self.wg[0] * sum_steer \
-              + self.wg[3] * sum_v_rate \
-                + self.wg[3] * sum_steer_rate
+              + self.wg[2] * sum_v_rate \
+                + self.wg[2] * sum_steer_rate
 
         return obj
 
@@ -355,7 +355,7 @@ class CasADi_MPC_TDROBCA:
         for i in range(self.horizon):
             lbx[0, i] = -self.x_max  # x
             ubx[0, i] = self.x_max  # x
-            lbx[1, i] = -self.y_max  # y
+            lbx[1, i] = 3.5 # y
             ubx[1, i] = self.y_max  # 1.1y
             lbx[2, i] = -ca.inf  # th
             ubx[2, i] = ca.inf  # th
@@ -398,103 +398,13 @@ class CasADi_MPC_TDROBCA:
         ubx[2, 0] = refpath[2, 0]
         ubx[3:, 0] = 0.
 
-        lbx[0, -1] = refpath[0, -1] - 0.2
-        lbx[1, -1] = refpath[1, -1] - 0.2
+        lbx[0, -1] = refpath[0, -1]
+        lbx[1, -1] = refpath[1, -1]
         lbx[2, -1] = refpath[2, -1]
         lbx[3:, -1] = 0.
 
-        ubx[0, -1] = refpath[0, -1] + 0.2
-        ubx[1, -1] = refpath[1, -1] + 0.2
-        ubx[2, -1] = refpath[2, -1]
-        ubx[3:, -1] = 0.
-
-        lbx_ = ca.vertcat(lbx, lblambda, lbmu, lbd)
-        ubx_ = ca.vertcat(ubx, ublambda, ubmu, ubd)
-        lbg_ = ca.vertcat(lbg, lbobca)
-        ubg_ = ca.vertcat(ubg, ubobca)
-
-        lbx_ = ca.reshape(lbx_, -1, 1)
-        ubx_ = ca.reshape(ubx_, -1, 1)
-
-        if self.optimize_dt:
-            lbx_ = ca.vertcat(0.01, lbx_)
-            ubx_ = ca.vertcat(0.2, ubx_)
-
-        lbg_ = ca.reshape(lbg_, -1, 1)
-        ubg_ = ca.reshape(ubg_, -1, 1)
-
-        return lbx_, ubx_, lbg_, ubg_
-
-    def init_bounds_OBCA3(self, refpath):
-
-        lbx = ca.DM.zeros(self.nx, self.horizon)
-        lblambda = ca.DM.zeros(self.obst_num * self.sides, self.horizon)
-        lbmu = ca.DM.zeros(self.sides, self.horizon)
-        lbd = ca.DM.zeros(self.obst_num, self.horizon)
-
-        ubx = ca.DM.zeros(self.nx, self.horizon)
-        ublambda = ca.DM.zeros(self.obst_num * self.sides, self.horizon)
-        ubmu = ca.DM.zeros(self.sides, self.horizon)
-        ubd = ca.DM.zeros(self.obst_num, self.horizon)
-
-        lbg = ca.DM.zeros(self.ng, self.horizon - 1)
-        lbobca = ca.DM.zeros(self.sides * self.obst_num, self.horizon - 1)
-        ubg = ca.DM.zeros(self.ng, self.horizon - 1)
-        ubobca = ca.DM.zeros(self.sides * self.obst_num, self.horizon - 1)
-
-        for i in range(self.horizon):
-            lbx[0, i] = refpath[0, i] - 0.5  # x
-            ubx[0, i] = refpath[0, i] + 0.5  # x
-            lbx[1, i] = refpath[1, i] - 0.5  # y
-            ubx[1, i] = refpath[1, i] + 0.5  # 1.1y
-            lbx[2, i] = -ca.pi  # th
-            ubx[2, i] = ca.pi  # th
-            lbx[3, i] = -self.v_max  # v
-            ubx[3, i] = self.v_max  # v
-            lbx[4, i] = -self.steer_max  # steer
-            ubx[4, i] = self.steer_max  # steer
-            if not self.reduced_states:
-                lbx[5, i] = -self.a_max  # a
-                ubx[5, i] = self.a_max  # a
-                lbx[6, i] = -self.steer_rate_max  # steer_rate
-                ubx[6, i] = self.steer_rate_max  # steer_rate
-                lbx[7, i] = -self.jerk_max  # jerk
-                ubx[7, i] = self.jerk_max  # jerk
-
-            lblambda[:, i] = 1e-8  # lambda, mu
-            lbmu[:, i] = 1e-8
-            lbd[:, i] = -ca.inf
-            ublambda[:, i] = ca.inf  # lambda, mu
-            ubmu[:, i] = ca.inf
-            ubd[:, i] = -1e-8
-
-        lbg[:, :] = -1e-5
-        ubg[:, :] = 1e-5
-
-        lbobca[:2 * self.obst_num, :] = 0.
-        ubobca[:2 * self.obst_num, :] = 1e-5
-        lbobca[2 * self.obst_num:3 * self.obst_num, :] = 0.
-        ubobca[2 * self.obst_num:3 * self.obst_num, :] = 0.
-        lbobca[3 * self.obst_num:4 * self.obst_num, :] = 0.
-        ubobca[3 * self.obst_num:4 * self.obst_num, :] = 1.
-
-        lbx[0, 0] = refpath[0, 0]
-        lbx[1, 0] = refpath[1, 0]
-        lbx[2, 0] = refpath[2, 0]
-        lbx[3:, 0] = 0.
-
-        ubx[0, 0] = refpath[0, 0]
-        ubx[1, 0] = refpath[1, 0]
-        ubx[2, 0] = refpath[2, 0]
-        ubx[3:, 0] = 0.
-
-        lbx[0, -1] = refpath[0, -1] - 0.2
-        lbx[1, -1] = refpath[1, -1] - 0.2
-        lbx[2, -1] = refpath[2, -1]
-        lbx[3:, -1] = 0.
-
-        ubx[0, -1] = refpath[0, -1] + 0.2
-        ubx[1, -1] = refpath[1, -1] + 0.2
+        ubx[0, -1] = refpath[0, -1]
+        ubx[1, -1] = refpath[1, -1]
         ubx[2, -1] = refpath[2, -1]
         ubx[3:, -1] = 0.
 

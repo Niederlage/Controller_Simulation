@@ -22,6 +22,8 @@ class UTurnMPC():
         self.car = AckermannCarModel()
         self.obmap = Obstacles()
         self.show_obstacles = False
+        self.yaw_rate_max = 180
+        self.acc_max = 10
 
     def ackermann_motion_model(self, zst, u_in, dt, Runge_Kutta=False):
         v_ = u_in[0]
@@ -45,7 +47,8 @@ class UTurnMPC():
         ax = plt.subplot(211)
         ax.plot(v_, label="v_front_wheel", color="red")
         ax.plot(v_ * np.cos(steer_), label="v_center")
-        ax.plot(acc_, "-.", label="acc")
+        ax.plot(np.clip(acc_, -self.acc_max, self.acc_max), "-.", label="acc")
+        ax.plot(np.clip(np.tan(steer_) / self.car.WB, -10., 10.), "g-", label="kappa")
         if not four_states:
             ax.plot(jerk_, "-.", label="jerk")
         ax.grid()
@@ -53,7 +56,7 @@ class UTurnMPC():
 
         ax = plt.subplot(212)
         ax.plot(yaw_ * 180 / np.pi, label="heading/grad")
-        ax.plot(yaw_rate_ * 180 / np.pi, label="yaw rate/grad")
+        ax.plot(np.clip(yaw_rate_ * 180 / np.pi, -self.yaw_rate_max, self.yaw_rate_max), label="yaw rate/grad")
         ax.plot(steer_ * 180 / np.pi, label="steer/grad", color="red")
         if not four_states:
             ax.plot(steer_rate_ * 180 / np.pi, "-.", label="steer rate/grad")
@@ -99,8 +102,8 @@ class UTurnMPC():
         self.obmap.plot_obst(ax)
 
         while True:
-            u_in = u_op[:, k]
 
+            u_in = u_op[:, k]
             zst = self.ackermann_motion_model(zst, u_in, self.dt, Runge_Kutta=self.use_Runge_Kutta)  # simulate robot
             trajectory = np.vstack((trajectory, zst))  # store state history
 
@@ -111,7 +114,6 @@ class UTurnMPC():
             if k >= u_op.shape[1]:
                 print("end point arrived...")
                 break
-
         return trajectory
 
     def plot_results(self, op_dt, op_trajectories, op_controls, ref_traj, four_states=True):
@@ -166,7 +168,7 @@ class UTurnMPC():
         ref_traj = loadtraj["saved_traj"]
         loadmap = np.load(map_adress, allow_pickle=True)
         self.obmap.obst_pointmap = loadmap["pointmap"]
-        return ref_traj, loadmap["pointmap"], loadmap["constraint_mat"]
+        return ref_traj, loadmap["pointmap"], loadmap["constraint_mat"], loadmap["bounds"]
 
     def get_car_shape(self):
         Lev2 = (self.car.LB + self.car.LF) / 2

@@ -19,7 +19,7 @@ class AckermannCarModel:
         self.W = 2.0  # width of car
         self.LF = 3.0  # distance from rear to vehicle front end
         self.LB = 1.0  # distance from rear to vehicle back end
-        self.MAX_STEER = 90 / 180 * np.pi  # [rad] maximum steering angle
+        self.MAX_STEER = 40 / 180 * np.pi  # [rad] maximum steering angle
         self.SAFE_FRONT = self.LF + 0.05
         self.SAFE_BACK = self.LB + 0.05
         self.SAFE_WIDTH = self.W + 0.05
@@ -186,14 +186,17 @@ class AckermannCarModel:
     def move(self, x, y, yaw, distance, steer):
         x += distance * cos(yaw)
         y += distance * sin(yaw)
-        yaw += self.pi_2_pi(distance * tan(steer) / self.WB)  # distance/2
+        yaw += distance * tan(steer) / self.WB  # distance/2
 
-        return x, y, self.pi_2_pi(yaw)
+        return x, y, yaw
 
     def move_forklift(self, x, y, yaw, distance, steer):
+        if abs(steer) >= self.MAX_STEER:
+            steer = steer / abs(steer) * self.MAX_STEER
+
         x += distance * cos(yaw) * cos(steer)
         y += distance * sin(yaw) * cos(steer)
-        yaw += self.pi_2_pi(distance * sin(steer) / self.WB)  # distance/2
+        yaw += distance * sin(steer) / self.WB  # distance/2
 
         return x, y, self.pi_2_pi(yaw)
 

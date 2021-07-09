@@ -4,9 +4,9 @@ LB: 0.5
 W: 0.8
 use_model_type: car
 start:
-  - 0.  # x end   - -7.5  # x end
+  - -0.5  # x end   - -7.5  # x end
   - 3. # y end - 7.5 # y end
-  - 90. # theta end - 0. # theta end
+  - 180. # theta end - 0. # theta end
 goal: # goal with angle
   - 3.9 # x end - -0.8  # x end
   - 0. # y end - 1.5 # y end

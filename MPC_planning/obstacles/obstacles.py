@@ -241,12 +241,17 @@ class Obstacles:
             plt.axis('off')
             plt.savefig("fig1.png")
 
-    def save_obmap(self):
-        savepath = "../data/saved_obmap.npz"
-        # savepath = "../data/saved_obmap_obca.npz"
+    def save_obmap(self, obcamap=False):
+
+        if obcamap:
+            savepath = "../data/saved_obmap_obca.npz"
+        else:
+            savepath = "../data/saved_obmap.npz"
+
         np.savez(savepath,
                  constraint_mat=self.coeff_mat,
                  pointmap=self.obst_pointmap,
+                 bounds=self.bounds,
                  polygons=self.obst_keypoints)
 
 
@@ -255,18 +260,22 @@ if __name__ == '__main__':
     plot_obmap = True
     save_map = True
 
+    use_obca_map = True
+
     if save_map:
         sample_test = False
     else:
         sample_test = True
 
     obst = Obstacles()
-    obst.generate_polygon_map()
-    # idx = []
-    # for i in range(12):
-    #     if i % 4 == 0 or i % 4 == 1:
-    #         idx.append(i)
-    # samples = samples[idx, :]
-    obst.save_obmap()
+    if use_obca_map:
+        obst.bounds_left_down = [-11., 3.]
+        obst.bounds_right_up = [11., 20.]
+        obst.bounds = obst.get_bounds()
+        obst.generate_polygon_map1()
+    else:
+        obst.generate_polygon_map()
+
+    obst.save_obmap(obcamap=use_obca_map)
     obst.plot_obst_on_fig()
     plt.show()
