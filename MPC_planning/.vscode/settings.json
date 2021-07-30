@@ -1,0 +1,22 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/home/ctj/jz_control_ws/devel/lib/python2.7/dist-packages",
+        "/opt/jz/jz-planning/lib/python2.7/dist-packages",
+        "/opt/jz/emma-tools/lib/python2.7/dist-packages",
+        "/opt/jz/cartographer-iplus-mod/lib/python2.7/dist-packages",
+        "/opt/jz/emma-rosnav/lib/python2.7/dist-packages",
+        "/opt/jz/iplus-algo-msgs/lib/python2.7/dist-packages",
+        "/opt/jz/jrosmm/lib/python2.7/dist-packages",
+        "/opt/ros/kinetic/lib/python2.7/dist-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/ctj/jz_control_ws/devel/lib/python2.7/dist-packages",
+        "/opt/jz/jz-planning/lib/python2.7/dist-packages",
+        "/opt/jz/emma-tools/lib/python2.7/dist-packages",
+        "/opt/jz/cartographer-iplus-mod/lib/python2.7/dist-packages",
+        "/opt/jz/emma-rosnav/lib/python2.7/dist-packages",
+        "/opt/jz/iplus-algo-msgs/lib/python2.7/dist-packages",
+        "/opt/jz/jrosmm/lib/python2.7/dist-packages",
+        "/opt/ros/kinetic/lib/python2.7/dist-packages"
+    ]
+}

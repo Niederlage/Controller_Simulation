@@ -198,7 +198,7 @@ class AckermannCarModel:
         y += distance * sin(yaw) * cos(steer)
         yaw += distance * sin(steer) / self.WB  # distance/2
 
-        return x, y, self.pi_2_pi(yaw)
+        return x, y, yaw
 
     def move_Runge_Kutta(self, x_, y_, yaw_, v_, steer_, dt, a_=0., steer_rate_=0.):
 

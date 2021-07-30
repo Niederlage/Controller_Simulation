@@ -240,9 +240,9 @@ def main():
             if try_segment:
                 op_dt, op_trajectories, op_controls = run_segment_OBCA_mpc(param, ref_traj, shape, obst)
             else:
-                # ut.use_Runge_Kutta = True
-                # op_dt, op_trajectories, op_controls = run_TDROBCA_mpc(param, ref_traj, shape, obst)
-                op_dt, op_trajectories, op_controls = run_differ_TDROBCA_mpc(param, ref_traj, shape, obst)
+                ut.use_Runge_Kutta = True
+                op_dt, op_trajectories, op_controls = run_TDROBCA_mpc(param, ref_traj, shape, obst)
+                # op_dt, op_trajectories, op_controls = run_differ_TDROBCA_mpc(param, ref_traj, shape, obst)
                 # op_dt, op_trajectories, op_controls = run_TDROBCA_Kappa_mpc(param, ref_traj, shape, obst)
 
             print("warm up OBCA total time:{:.3f}s".format(time.time() - start_time))
